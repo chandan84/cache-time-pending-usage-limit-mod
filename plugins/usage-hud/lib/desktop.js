@@ -243,26 +243,27 @@ export function desktopBreakdown(el, m, h, columns, compact) {
 
 // ------------------------------------------------------------------ sites
 
-function cards(el, m, columns, stacked) {
+function cards(el, m, columns) {
   const total = Math.max(600, columns * PX_PER_COL)
   const avail = total - GAP_PX * 2
   const w1 = Math.round(avail * 0.3), w2 = Math.round(avail * 0.36), w3 = Math.round(avail - w1 - w2)
   const c = m.ctx
   const s = cacheStatus(m.cache, m.now)
   const svg = (source, alt) => el.Svg({ source, alt })
-  const usage = svg(usageSvg(m, stacked ? Math.round(total) : w1), `Today across all sessions: ${fmt.usd(m.todayCost)}, ${fmt.tokens(m.todayTokens)} tokens`)
-  const ctx = svg(contextSvg(m, stacked ? Math.round(total) : w2), c ? `Context ${fmt.tokens(c.used)} of ${fmt.tokens(c.window)}, soft limit ${fmt.tokens(c.soft)}` : 'Context: waiting for the first response')
-  const cache = svg(cacheSvg(m, stacked ? Math.round(total) : w3), m.cache ? `Prompt cache ${s.word}, ${countdown(s.remaining)} left` : 'Prompt cache idle')
+  const usage = svg(usageSvg(m, w1), `Today across all sessions: ${fmt.usd(m.todayCost)}, ${fmt.tokens(m.todayTokens)} tokens`)
+  const ctx = svg(contextSvg(m, w2), c ? `Context ${fmt.tokens(c.used)} of ${fmt.tokens(c.window)}, soft limit ${fmt.tokens(c.soft)}` : 'Context: waiting for the first response')
+  const cache = svg(cacheSvg(m, w3), m.cache ? `Prompt cache ${s.word}, ${countdown(s.remaining)} left` : 'Prompt cache idle')
   return [usage, ctx, cache]
 }
 
+// The band holds the three cards only. Desktop gives the band little height, so the breakdown
+// opens on demand in its own pane rather than pushing the cards out of view.
 export function desktopBand(el, m, h, columns) {
-  const [usage, ctx, cache] = cards(el, m, columns, false)
+  const [usage, ctx, cache] = cards(el, m, columns)
   return col(el, [
-    m.expanded ? desktopBreakdown(el, m, h, columns, true) : null,
     row(el, [
       el.Box({ flexGrow: 1 }),
-      el.Button({ key: 'toggle', label: m.expanded ? '▼ Hide breakdown' : '▲ Breakdown', plain: true, onPress: h.toggle }),
+      el.Button({ key: 'toggle', label: m.paneOpen ? '▼ Hide breakdown' : '▲ Breakdown', plain: true, onPress: h.toggle }),
     ]),
     row(el, [
       el.Box({ width: '30%', children: [usage] }),
@@ -272,7 +273,10 @@ export function desktopBand(el, m, h, columns) {
   ], { rowGap: 0 })
 }
 
+// The breakdown pane: the cards stay in the band, so the pane holds the breakdown alone.
 export function desktopPane(el, m, h, columns) {
-  const [usage, ctx, cache] = cards(el, m, columns, true)
-  return col(el, [desktopBreakdown(el, m, h, columns, false), usage, ctx, cache], { rowGap: 1 })
+  return col(el, [
+    desktopBreakdown(el, m, h, columns, false),
+    row(el, [el.Box({ flexGrow: 1 }), el.Button({ key: 'close', label: '✕ Close', plain: true, onPress: h.toggle })]),
+  ], { rowGap: 1 })
 }

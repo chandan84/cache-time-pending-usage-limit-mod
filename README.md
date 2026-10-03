@@ -6,11 +6,11 @@ A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that 
 
 | Card | What it shows |
 | :- | :- |
-| **Today · all sessions** | Tokens and API-equivalent cost **today across every local session**, a 14-day trend, and the all-time total. **▲ Breakdown** opens a 30-day chart (cost or tokens) above the cards, with the **per-session split** for the selected day. **◄ ►** moves between days, subagent spend shows in violet, and this session in coral. |
+| **Today · all sessions** | Tokens and API-equivalent cost **today across every local session**, a 14-day trend, and the all-time total. **▲ Breakdown** opens, on demand, a 30-day chart (cost or tokens) with the **per-session split** for the selected day. **◄ ►** moves between days, subagent spend shows in violet, and this session in coral. |
 | **Context window** | This conversation's context against the model's window. The meter is **teal up to a 240K soft limit**, marked with an amber **►**; anything past it is **hatched gray** as "not optimal". Shows tokens free and the distance to or past the soft limit. |
 | **Prompt cache** | The TTL the API actually wrote (1h or 5m), when the current **warm streak started**, the last cache hit, a **countdown** to expiry from the last request (whole minutes, then m:ss in the last two; teal → amber → coral, with a ring gauge in Desktop), and the **last turn's tokens and cost**, subagents included. |
 
-Desktop draws each card as one rounded SVG image (gradient columns, an area sparkline, a ring gauge, a gradient context meter) with its own typography, and redraws only when a figure changes, so nothing flickers. The terminal draws the same cards with solid color-filled cells and half-cell edges on a matte card surface, in 24-bit color. In a terminal too short for the breakdown, **▲ Breakdown** and `/usage-hud` open it as a pane.
+Desktop draws each card as one rounded SVG image (gradient columns, an area sparkline, a ring gauge, a gradient context meter) with its own typography, and redraws only when a figure changes, so nothing flickers. The terminal draws the same cards with solid color-filled cells and half-cell edges on a matte card surface, in 24-bit color. The band shows the three cards by default. The breakdown opens on demand: in its own pane on Desktop, and above the cards in a terminal (or as a pane when the terminal is too short).
 
 ## Install
 
@@ -30,7 +30,7 @@ Check a machine first with `scripts/check-prereqs.ps1` (Windows) or `scripts/che
 
 | Command | What it does |
 | :- | :- |
-| `/usage-hud` | Toggle the daily/per-session breakdown above the cards |
+| `/usage-hud` | Open or close the daily/per-session breakdown (a pane on Desktop, above the cards in a terminal) |
 | `/usage-hud pane` | Open the breakdown in a pane |
 | `/usage-hud report` | Print a text summary (works where nothing is drawn, such as `claude -p`) |
 | `/usage-hud refresh` | Re-read history now |

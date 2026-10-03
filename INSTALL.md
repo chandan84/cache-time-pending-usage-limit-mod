@@ -152,7 +152,7 @@ claude plugin install usage-hud@usage-hud-mods
 
 1. In a new session, the band above the prompt shows three cards: **TODAY · ALL SESSIONS**, **CONTEXT WINDOW**, and **PROMPT CACHE**.
 2. Send any prompt. When the answer arrives, the context meter fills, the cache card turns **● WARM** with a countdown, and **LAST TURN** shows that turn's tokens and cost.
-3. Click **▲ Breakdown**, or run `/usage-hud`, to open the daily chart and per-session list above the cards. Use **◄ ►** to move between days.
+3. Click **▲ Breakdown**, or run `/usage-hud`, to open the daily chart and per-session list: a pane on Desktop, above the cards in a terminal. Use **◄ Prev / Next ►** to move between days. It always starts closed.
 4. `/plugin` lists `usage-hud` under **Installed**, and in a terminal session the line under its tabs reads `1 mod active · usage-hud`.
 5. For a check that draws nothing, run this from a shell. It prints today's totals:
 

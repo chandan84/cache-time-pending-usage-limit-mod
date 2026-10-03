@@ -34,6 +34,7 @@ const ui = { expanded: false, metric: 'cost', day: null }
 let lastTick = ''           // tickKey() at the last timer redraw
 let bandRows = 40           // the band's maxRows at its last draw, and its surface
 let bandSurface = 'terminal'
+let paneOpen = false        // the breakdown pane is showing
 
 // ------------------------------------------------------------------ data
 
@@ -129,6 +130,7 @@ function viewModel(surface) {
     surface,
     now,
     expanded: ui.expanded,
+    paneOpen,
     metric: ui.metric,
     day: currentDay(),
     currentSessionId: sessionId,
@@ -152,14 +154,28 @@ function bandTooShort() {
   return bandSurface === 'terminal' && bandRows < BREAKDOWN_MIN_BAND_ROWS
 }
 
+// The breakdown is on demand. Desktop always shows it in a pane, since its band is short
+// and the cards must stay in view; the terminal expands it above the cards when there's room.
 async function toggleBreakdown($) {
-  if (!ui.expanded && bandTooShort()) {
+  if (paneOpen) {
+    await $.ui.close({ id: PANE })
+    paneOpen = false
+    $.ui.invalidate('ui.render')
+    return
+  }
+  if (!ui.expanded && (bandSurface !== 'terminal' || bandTooShort())) {
     await $.ui.open({ id: PANE, title: 'Usage', focus: true, closeOnEscape: true })
+    paneOpen = true
+    $.ui.invalidate('ui.render')
     return
   }
   ui.expanded = !ui.expanded
   $.ui.invalidate('ui.render')
-  await $.store.set('ui', { expanded: ui.expanded, metric: ui.metric })
+}
+
+// Only the Cost/Tokens choice outlives a session; the breakdown always starts closed.
+async function saveMetric($) {
+  await $.store.set('ui', { metric: ui.metric })
 }
 
 // ------------------------------------------------------------------ hooks
@@ -175,10 +191,8 @@ export function register(on, opts) {
       immediate: true,
     })
     const saved = await $.store.get('ui')
-    if (saved && typeof saved === 'object') {
-      ui.expanded = !!saved.expanded
-      if (saved.metric === 'tokens' || saved.metric === 'cost') ui.metric = saved.metric
-    }
+    ui.expanded = false
+    if (saved && (saved.metric === 'tokens' || saved.metric === 'cost')) ui.metric = saved.metric
     await loadSessionFacts($)
     await runScan($)
     // The countdown changes once a minute (every second in its last two), so check each second
@@ -239,6 +253,7 @@ export function register(on, opts) {
     const arg = String(e.args || '').trim().toLowerCase()
     if (arg === 'pane') {
       await $.ui.open({ id: PANE, title: 'Usage', focus: true, closeOnEscape: true })
+      paneOpen = true
       return {}
     }
     if (arg === 'refresh') {
@@ -262,7 +277,7 @@ export function register(on, opts) {
       metric: async (k) => {
         ui.metric = k
         $.ui.invalidate('ui.render')
-        await $.store.set('ui', { expanded: ui.expanded, metric: ui.metric })
+        await saveMetric($)
       },
       prevDay: () => { shiftDay(-1); $.ui.invalidate('ui.render') },
       nextDay: () => { shiftDay(1); $.ui.invalidate('ui.render') },
@@ -276,12 +291,25 @@ export function register(on, opts) {
     return theirs ? el.Box({ flexDirection: 'column', children: [mine, theirs] }) : mine
   })
 
+  // Esc or the pane's own close: keep the Breakdown button's label in step.
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE) {
+      paneOpen = false
+      $.ui.invalidate('ui.render')
+    }
+    return next(e)
+  })
+
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE) return next(e)
     const el = $.ui.resolve(e)
     const h = {
-      toggle: async () => { await $.ui.close({ id: PANE }) },
-      metric: (k) => { ui.metric = k; $.ui.invalidate('ui.render') },
+      toggle: () => toggleBreakdown($),
+      metric: async (k) => {
+        ui.metric = k
+        $.ui.invalidate('ui.render')
+        await saveMetric($)
+      },
       prevDay: () => { shiftDay(-1); $.ui.invalidate('ui.render') },
       nextDay: () => { shiftDay(1); $.ui.invalidate('ui.render') },
       today: () => { ui.day = null; $.ui.invalidate('ui.render') },

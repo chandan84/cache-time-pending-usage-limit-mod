@@ -88,6 +88,28 @@ test('the band draws all three boxes on both surfaces', async ($, on) => {
   await desk.unmount()
 })
 
+test('the breakdown starts closed every session, even if it was open last time', async ($, on) => {
+  const saved = stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: SID })))
+  saved.set('ui', { expanded: true, metric: 'tokens' }) // what older versions stored
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  const ui = await $.ui.mount(BAND('terminal'))
+  expect(await ui.find({ type: 'Text', text: /^SESSIONS · / })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'TODAY · ALL SESSIONS' })).toBeDefined()
+})
+
+test('on Desktop the breakdown opens and closes as a pane, and the cards stay', async ($, on) => {
+  stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: SID })))
+  const calls: string[] = []
+  on('ui.open', ($: any, e: any) => { calls.push('open ' + e.id); return { value: { isPlaced: true } } })
+  on('ui.close', ($: any, e: any) => { calls.push('close ' + e.id); return { value: undefined } })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work/hud' })
+  const ui = await $.ui.mount(BAND('desktop'))
+  await ui.press({ key: 'toggle' })
+  await ui.press({ key: 'toggle' })
+  expect(calls).toEqual(['open usage-hud', 'close usage-hud'])
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+})
+
 test('a band too short for the breakdown opens it in a pane instead', async ($, on) => {
   stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: SID })))
   const opened: string[] = []
@@ -107,12 +129,12 @@ test('the breakdown expands above the boxes and pages through days', async ($, o
   await ui.press({ key: 'toggle' })
   expect(await ui.find({ type: 'Text', text: /^SESSIONS · / })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Build the HUD/ })).toBeDefined()
-  expect(saved.get('ui')).toEqual({ expanded: true, metric: 'cost' })
+  expect(saved.get('ui')).toBeUndefined() // open/closed isn't remembered
   await ui.press({ key: 'prev' })
   expect(await ui.find({ type: 'Text', text: 'No usage recorded on this day.' })).toBeDefined()
   await ui.press({ key: 'today' })
   await ui.press({ key: 'm-tok' })
-  expect(saved.get('ui')).toEqual({ expanded: true, metric: 'tokens' })
+  expect(saved.get('ui')).toEqual({ metric: 'tokens' })
 })
 
 test('turn.step updates context, cache and the running turn live', async ($, on) => {

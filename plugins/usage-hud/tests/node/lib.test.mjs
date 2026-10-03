@@ -80,12 +80,12 @@ test('terminal band draws text meters with the soft-limit arrow', () => {
   assert.match(all, /SESSIONS · /)
 })
 
-test('desktop draws each card whole as a rounded SVG, with the breakdown as one more', () => {
+test('desktop draws each card whole as a rounded SVG; the band holds only the cards', () => {
   const tree = band(EL, model('desktop'), H, 140)
   const svgs = []
   const walk = (n) => { if (n && n.type === 'Svg') svgs.push(n); for (const c of (n && n.props && n.props.children) || []) walk(c) }
   walk(tree)
-  assert.equal(svgs.length, 4) // usage, context, cache cards + the expanded breakdown
+  assert.equal(svgs.length, 3) // the three cards; the breakdown opens in a pane on Desktop
   for (const s of svgs) {
     assert.ok(s.props.alt)
     assert.match(s.props.source, /^<svg/)
@@ -96,11 +96,16 @@ test('desktop draws each card whole as a rounded SVG, with the breakdown as one 
   assert.match(all, /Over soft limit/) // quiet amber note, no chip
   assert.match(all, /TODAY · ALL SESSIONS/)
   assert.match(all, /PROMPT CACHE/)
-  // the controls stay real buttons
-  const buttons = []
-  const walkB = (n) => { if (n && n.type === 'Button') buttons.push(n.props.key); for (const c of (n && n.props && n.props.children) || []) walkB(c) }
-  walkB(tree)
-  for (const k of ['toggle', 'm-cost', 'm-tok', 'prev', 'next', 'today']) assert.ok(buttons.includes(k), k)
+  // The controls stay real buttons: the band has the toggle, the pane the breakdown's controls.
+  const keys = (tree) => {
+    const out = []
+    const walkB = (n) => { if (n && n.type === 'Button') out.push(n.props.key); for (const c of (n && n.props && n.props.children) || []) walkB(c) }
+    walkB(tree)
+    return out
+  }
+  assert.deepEqual(keys(tree), ['toggle'])
+  const paneKeys = keys(pane(EL, model('desktop'), H, 110))
+  for (const k of ['m-cost', 'm-tok', 'prev', 'next', 'today', 'close']) assert.ok(paneKeys.includes(k), k)
 })
 
 test('narrow terminals stack the boxes; pane and text summary render', () => {

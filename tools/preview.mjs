@@ -71,8 +71,8 @@ img{max-width:100%;height:auto;display:block}
 .dark .prompt{border-color:#333}
 </style>
 <h2>Band · Desktop · light app theme</h2><div class="frame">${html(band(EL, model(false, 'desktop'), H, cols, 30))}<div class="prompt">Reply to Claude…</div></div>
-<h2>Band expanded · Desktop · dark app theme</h2><div class="frame dark">${html(band(EL, model(true, 'desktop'), H, cols, 30))}<div class="prompt">Reply to Claude…</div></div>
-<h2>Pane · Desktop</h2><div class="frame dark" style="width:${110 * COL}px">${html(pane(EL, model(true, 'desktop'), H, 110))}</div>`
+<h2>Band · Desktop · dark app theme</h2><div class="frame dark">${html(band(EL, model(false, 'desktop'), H, cols, 30))}<div class="prompt">Reply to Claude…</div></div>
+<h2>Breakdown pane · Desktop (on demand)</h2><div class="frame dark" style="width:${110 * COL}px">${html(pane(EL, model(true, 'desktop'), H, 110))}</div>`
 
 const out = process.argv[2] || path.join(here, '..', 'preview.html')
 fs.writeFileSync(out, page)
