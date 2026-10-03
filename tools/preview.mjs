@@ -66,6 +66,7 @@ h2{font:600 12px Inter,'Segoe UI',sans-serif;color:#77756f;letter-spacing:.06em;
 .dark{background:#141519}
 button{font:inherit;color:${P.blueLight};background:none;border:0;padding:0 4px;cursor:pointer}
 span{white-space:pre}
+img{max-width:100%;height:auto;display:block}
 .prompt{margin-top:10px;border:1px solid #ddd;border-radius:12px;padding:12px;color:#999}
 .dark .prompt{border-color:#333}
 </style>

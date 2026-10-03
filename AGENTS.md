@@ -27,7 +27,9 @@ Never flip `cachedGrowthBookFeatures.tengu_plugin_hooks_modules` in `~/.claude.j
 | `plugins/usage-hud/.claude-plugin/plugin.json` | Manifest, including `userConfig` (`context_soft_limit`, `history_days`) |
 | `plugins/usage-hud/hooks/hooks.json` | Points at the hooks module |
 | `plugins/usage-hud/hooks/register.js` | Hooks module: events, live state, commands, rendering entry points. The only file that calls the mods API (`$`) |
-| `plugins/usage-hud/lib/view.js` | Pure element-tree builders for the band and pane: matte palette `P`, terminal cell painting, Desktop SVGs |
+| `plugins/usage-hud/lib/view.js` | Pure element-tree builders for the band and pane; terminal cards drawn with background-colored cells. Hands Desktop to `desktop.js` |
+| `plugins/usage-hud/lib/desktop.js` | Desktop renderer: each card is one rounded SVG image with its own typography; controls stay Button elements |
+| `plugins/usage-hud/lib/theme.js` | Matte palette `P`, cache status, countdown, and `tickKey()` (what the timer compares before redrawing) |
 | `plugins/usage-hud/lib/ledger.js` | Pure transcript parser and aggregator (dedup, per-day/per-session sums, cache TTL and warm streaks) |
 | `plugins/usage-hud/lib/pricing.js` | Model prices, context windows, usage normalization |
 | `plugins/usage-hud/scripts/scan.mjs` | Node scanner the mod runs through `$.process.run`; incremental, cached in `~/.claude/usage-hud/` |
@@ -53,5 +55,6 @@ Run all three test and validation commands before committing. Rules that keep th
 - Element props must be ones the element accepts; strip `undefined` (see `clean()` in `view.js`).
 - The band must fit `e.props.maxRows`, so the three cards never scroll away. A test enforces this.
 - Visual changes: keep the matte palette in `P`, use background-colored cells (not line art) in the terminal and SVG on Desktop, and check both `surface: 'terminal'` and `'desktop'`.
+- No flicker on Desktop: never set `isInteractive` on an `Svg` (it becomes a frame rebuilt on every redraw), keep SVG sources stable between redraws, and redraw on the timer only when `tickKey()` changes.
 
 Bump `version` in `plugins/usage-hud/.claude-plugin/plugin.json` for every release. Installed copies are cached by version, so users won't get changes otherwise.

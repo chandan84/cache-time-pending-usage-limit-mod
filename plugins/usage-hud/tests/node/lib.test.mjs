@@ -80,13 +80,27 @@ test('terminal band draws text meters with the soft-limit arrow', () => {
   assert.match(all, /SESSIONS · /)
 })
 
-test('desktop band uses SVG for the meter and the daily chart', () => {
+test('desktop draws each card whole as a rounded SVG, with the breakdown as one more', () => {
   const tree = band(EL, model('desktop'), H, 140)
   const svgs = []
   const walk = (n) => { if (n && n.type === 'Svg') svgs.push(n); for (const c of (n && n.props && n.props.children) || []) walk(c) }
   walk(tree)
-  assert.equal(svgs.length, 5) // sparkline, meter, cache ring, daily columns, session bars
-  for (const s of svgs) { assert.ok(s.props.alt); assert.match(s.props.source, /^<svg/); assert.ok(s.props.source.length < 131072) }
+  assert.equal(svgs.length, 4) // usage, context, cache cards + the expanded breakdown
+  for (const s of svgs) {
+    assert.ok(s.props.alt)
+    assert.match(s.props.source, /^<svg/)
+    assert.match(s.props.source, /rx="14"/) // rounded card frame
+    assert.ok(s.props.source.length < 131072)
+  }
+  const all = svgs.map((s) => s.props.source).join('')
+  assert.match(all, /Over soft limit/) // quiet amber note, no chip
+  assert.match(all, /TODAY · ALL SESSIONS/)
+  assert.match(all, /PROMPT CACHE/)
+  // the controls stay real buttons
+  const buttons = []
+  const walkB = (n) => { if (n && n.type === 'Button') buttons.push(n.props.key); for (const c of (n && n.props && n.props.children) || []) walkB(c) }
+  walkB(tree)
+  for (const k of ['toggle', 'm-cost', 'm-tok', 'prev', 'next', 'today']) assert.ok(buttons.includes(k), k)
 })
 
 test('narrow terminals stack the boxes; pane and text summary render', () => {
@@ -115,13 +129,18 @@ test('the expanded band fits maxRows so the boxes stay visible', () => {
     const tree = band(EL, model('terminal'), H, cols, rows)
     assert.ok(height(tree) <= rows, `cols=${cols} rows=${rows} drew ${height(tree)}`)
   }
-  assert.match(texts(band(EL, model('terminal'), H, 150, 10)).join('\n'), /usage-hud pane/)
+  // Too short for the breakdown: the cards alone (the hooks module opens a pane instead).
+  assert.doesNotMatch(texts(band(EL, model('terminal'), H, 150, 10)).join('\n'), /SESSIONS · /)
 })
 
 test('an expanded band draws before the first history scan lands', () => {
   for (const surface of ['terminal', 'desktop']) {
     const m = model(surface, { series: [], sessionsByDay: {}, histError: 'Reading history…', todayCost: 0, todayTokens: 0, totalCost: 0 })
-    assert.match(texts(band(EL, m, H, 150, 30)).join('\n'), /Reading history/)
+    const tree = band(EL, m, H, 150, 30)
+    const svgText = []
+    const walk = (n) => { if (n && n.type === 'Svg') svgText.push(n.props.source); for (const c of (n && n.props && n.props.children) || []) walk(c) }
+    walk(tree)
+    assert.match(texts(tree).join('\n') + svgText.join(''), /Reading history/)
     assert.ok(pane(EL, m, H, 100))
   }
 })

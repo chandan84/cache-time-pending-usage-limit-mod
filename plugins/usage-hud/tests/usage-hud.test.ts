@@ -71,17 +71,32 @@ test('ledger dedupes split responses and prices cache writes by TTL', async () =
 test('the band draws all three boxes on both surfaces', async ($, on) => {
   stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: SID })))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount(BAND(surface))
-    expect(await ui.find({ type: 'Text', text: 'TODAY · ALL SESSIONS' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^251K$/ })).toBeDefined()        // context used
-    expect(await ui.find({ type: 'Text', text: /past 240K/ })).toBeDefined()      // over the soft limit
-    expect(await ui.find({ type: 'Text', text: ' 1H TTL ' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^started \d\d:\d\d · last hit/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'LAST TURN ' })).toBeDefined()
-    if (surface === 'desktop') expect(await ui.find({ type: 'Svg' })).toBeDefined()
-    await ui.unmount()
-  }
+  const term = await $.ui.mount(BAND('terminal'))
+  expect(await term.find({ type: 'Text', text: 'TODAY · ALL SESSIONS' })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: /^251K$/ })).toBeDefined()        // context used
+  expect(await term.find({ type: 'Text', text: /past 240K/ })).toBeDefined()      // over the soft limit
+  expect(await term.find({ type: 'Text', text: ' 1H TTL ' })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: /^started \d\d:\d\d · last hit/ })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: 'LAST TURN ' })).toBeDefined()
+  await term.unmount()
+  // Desktop: whole cards as SVG images; the engine validates the tree for that surface.
+  const desk = await $.ui.mount(BAND('desktop'))
+  const svg = await desk.find({ type: 'Svg' })
+  expect(svg).toBeDefined()
+  expect(svg.props.source).toMatch(/TODAY · ALL SESSIONS/)
+  expect(await desk.find({ key: 'toggle' })).toBeDefined()
+  await desk.unmount()
+})
+
+test('a band too short for the breakdown opens it in a pane instead', async ($, on) => {
+  stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: SID })))
+  const opened: string[] = []
+  on('ui.open', ($: any, e: any) => { opened.push(e.id); return { value: { isPlaced: true } } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  const ui = await $.ui.mount({ ...BAND('terminal'), props: { ...BAND('terminal').props, maxRows: 9 } })
+  await ui.press({ key: 'toggle' })
+  expect(opened).toEqual(['usage-hud'])
+  expect(await ui.find({ type: 'Text', text: /^SESSIONS · / })).toBeUndefined()
 })
 
 test('the breakdown expands above the boxes and pages through days', async ($, on) => {

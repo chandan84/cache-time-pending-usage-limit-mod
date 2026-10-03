@@ -11,7 +11,7 @@
 
 import { createPricer, normalizeUsage, totalTokens, contextTokens } from '../lib/pricing.js'
 import { localDay } from '../lib/format.js'
-import { band, pane, textSummary, tickKey } from '../lib/view.js'
+import { band, pane, textSummary, tickKey, BREAKDOWN_MIN_BAND_ROWS } from '../lib/view.js'
 
 const PANE = 'usage-hud'
 const HOUR = 3_600_000
@@ -32,6 +32,8 @@ let live = null             // this session, from turn.step: { model, contextTok
 let turn = null             // { tokens, cost, requests, startTs, running }
 const ui = { expanded: false, metric: 'cost', day: null }
 let lastTick = ''           // tickKey() at the last timer redraw
+let bandRows = 40           // the band's maxRows at its last draw, and its surface
+let bandSurface = 'terminal'
 
 // ------------------------------------------------------------------ data
 
@@ -145,6 +147,21 @@ function viewModel(surface) {
   }
 }
 
+// A terminal band too short for the breakdown shows it in a pane instead.
+function bandTooShort() {
+  return bandSurface === 'terminal' && bandRows < BREAKDOWN_MIN_BAND_ROWS
+}
+
+async function toggleBreakdown($) {
+  if (!ui.expanded && bandTooShort()) {
+    await $.ui.open({ id: PANE, title: 'Usage', focus: true, closeOnEscape: true })
+    return
+  }
+  ui.expanded = !ui.expanded
+  $.ui.invalidate('ui.render')
+  await $.store.set('ui', { expanded: ui.expanded, metric: ui.metric })
+}
+
 // ------------------------------------------------------------------ hooks
 
 export function register(on, opts) {
@@ -232,9 +249,7 @@ export function register(on, opts) {
       await runScan($)
       return { text: textSummary(viewModel('text')) }
     }
-    ui.expanded = !ui.expanded
-    await $.store.set('ui', { expanded: ui.expanded, metric: ui.metric })
-    $.ui.invalidate('ui.render')
+    await toggleBreakdown($)
     return {}
   })
 
@@ -243,11 +258,7 @@ export function register(on, opts) {
     bandSeen = true
     const el = $.ui.resolve(e)
     const h = {
-      toggle: async () => {
-        ui.expanded = !ui.expanded
-        $.ui.invalidate('ui.render')
-        await $.store.set('ui', { expanded: ui.expanded, metric: ui.metric })
-      },
+      toggle: () => toggleBreakdown($),
       metric: async (k) => {
         ui.metric = k
         $.ui.invalidate('ui.render')
@@ -257,7 +268,9 @@ export function register(on, opts) {
       nextDay: () => { shiftDay(1); $.ui.invalidate('ui.render') },
       today: () => { ui.day = null; $.ui.invalidate('ui.render') },
     }
-    const mine = band(el, viewModel(e.surface), h, e.props.bodyColumns || 120, e.props.maxRows || 40)
+    bandRows = e.props.maxRows || 40
+    bandSurface = e.surface
+    const mine = band(el, viewModel(e.surface), h, e.props.bodyColumns || 120, bandRows)
     // Keep whatever other mods draw in the band, under ours.
     const theirs = await next(e)
     return theirs ? el.Box({ flexDirection: 'column', children: [mine, theirs] }) : mine

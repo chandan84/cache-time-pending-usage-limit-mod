@@ -10,7 +10,7 @@ A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that 
 | **Context window** | This conversation's context against the model's window. The meter is **teal up to a 240K soft limit**, marked with an amber **►**; anything past it is **hatched gray** as "not optimal". Shows tokens free and the distance to or past the soft limit. |
 | **Prompt cache** | The TTL the API actually wrote (1h or 5m), when the current **warm streak started**, the last cache hit, a **countdown** to expiry from the last request (whole minutes, then m:ss in the last two; teal → amber → coral, with a ring gauge in Desktop), and the **last turn's tokens and cost**, subagents included. |
 
-Desktop draws the charts as SVG: gradient columns, an area sparkline, a ring gauge, and a ring gauge. The terminal draws the same cards with solid color-filled cells and half-cell edges on a matte card surface, in 24-bit color.
+Desktop draws each card as one rounded SVG image (gradient columns, an area sparkline, a ring gauge, a gradient context meter) with its own typography, and redraws only when a figure changes, so nothing flickers. The terminal draws the same cards with solid color-filled cells and half-cell edges on a matte card surface, in 24-bit color. In a terminal too short for the breakdown, **▲ Breakdown** and `/usage-hud` open it as a pane.
 
 ## Install
 

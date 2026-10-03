@@ -2,35 +2,15 @@
 // Pure: it receives the element constructors from `$.ui.resolve(e)`, a view model, and
 // callbacks, so it holds no mods API calls of its own (those stay in register.js).
 //
-// Look: matte "cards" with their own dark surface (so they read the same on light and dark
-// themes), solid color-filled meters instead of line art, and gradient charts. The terminal
-// draws with background-colored cells and half-cell edges; Desktop draws SVG.
+// Terminal look: matte "cards" with their own dark surface (so they read the same on light
+// and dark themes), solid color-filled meters instead of line art, and gradient charts, drawn
+// with background-colored cells and half-cell edges. Desktop is drawn by desktop.js.
 
 import * as fmt from './format.js'
+import { P, countdown, cacheStatus, tickKey } from './theme.js'
+import { desktopBand, desktopPane } from './desktop.js'
 
-// Matte palette. Card surfaces are dark in every theme; hues are desaturated mid-tones.
-export const P = {
-  card: '#1b1e24',
-  raised: '#23272f',
-  track: '#2f343e',
-  zebra: '#20242b',
-  hi: '#eceae4',
-  mid: '#a6a49c',
-  low: '#6d6c67',
-  blue: '#6f93db',
-  blueDeep: '#34518c',
-  blueLight: '#b3c8f2',
-  teal: '#4fae98',
-  tealDeep: '#2b7465',
-  amber: '#d9a54b',
-  coral: '#d9785e',
-  coralDeep: '#9c4d39',
-  violet: '#9a87d6',
-  slate: '#6b707c',
-}
-
-const FONT = "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
-const PX_PER_COL = 7.2 // Desktop: CSS pixels per layout column, for sizing SVGs to their card
+export { P, countdown, cacheStatus, tickKey }
 
 // ------------------------------------------------------------------ small helpers
 
@@ -100,144 +80,12 @@ function card(el, children, { width, bg = P.card, key } = {}) {
 }
 const label = (el, text) => t(el, text, { color: P.low, bold: true })
 
-// ------------------------------------------------------------------ SVG (Desktop)
-
-function svgSpark(values, w, h) {
-  const max = Math.max(...values, 0) || 1
-  const step = values.length > 1 ? w / (values.length - 1) : w
-  const pts = values.map((v, i) => [i * step, h - 3 - (v / max) * (h - 8)])
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
-  const [lx, ly] = pts[pts.length - 1]
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-<defs><linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${P.blue}" stop-opacity="0.55"/><stop offset="1" stop-color="${P.blue}" stop-opacity="0"/></linearGradient></defs>
-<path d="${line} L${w},${h} L0,${h} Z" fill="url(#a)"/>
-<path d="${line}" fill="none" stroke="${P.blueLight}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3" fill="${P.blueLight}" stroke="${P.card}" stroke-width="1.5"/>
-</svg>`
-}
-
-function svgMeter(used, window, soft, w) {
-  const h = 30, y = 14, bh = 10, r = 5
-  const x = (v) => Math.max(0, Math.min(w, (v / window) * w))
-  const okW = x(Math.min(used, soft))
-  const mx = x(soft)
-  const overW = used > soft ? x(used) - mx : 0
-  const right = mx > w - 44
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-<defs>
-<linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="${P.tealDeep}"/><stop offset="1" stop-color="${P.teal}"/></linearGradient>
-<pattern id="o" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="${P.slate}"/><rect width="2" height="5" fill="#575b65"/></pattern>
-<clipPath id="c"><rect x="0" y="${y}" width="${w}" height="${bh}" rx="${r}"/></clipPath>
-</defs>
-<rect x="0" y="${y}" width="${w}" height="${bh}" rx="${r}" fill="${P.track}"/>
-<g clip-path="url(#c)">
-<rect x="0" y="${y}" width="${okW.toFixed(1)}" height="${bh}" fill="url(#g)"><title>${fmt.tokens(Math.min(used, soft))} within the ${fmt.tokens(soft)} soft limit</title></rect>
-${overW > 0 ? `<rect x="${mx.toFixed(1)}" y="${y}" width="${overW.toFixed(1)}" height="${bh}" fill="url(#o)"><title>${fmt.tokens(used - soft)} past ${fmt.tokens(soft)}: not optimal</title></rect>` : ''}
-</g>
-<rect x="${(mx - 0.75).toFixed(1)}" y="${y - 3}" width="1.5" height="${bh + 6}" rx="0.75" fill="${P.amber}"/>
-<path d="M${(mx - 8).toFixed(1)},${y - 9} L${(mx - 1.5).toFixed(1)},${y - 5.5} L${(mx - 8).toFixed(1)},${y - 2} Z" fill="${P.amber}"><title>${fmt.tokens(soft)} soft limit</title></path>
-<text x="${(right ? mx - 11 : mx + 4).toFixed(1)}" y="${y - 3}" font-family="${FONT}" font-size="9" font-weight="600" fill="${P.amber}" text-anchor="${right ? 'end' : 'start'}">${fmt.tokens(soft)}</text>
-</svg>`
-}
-
-function svgRing(frac, color, size = 46) {
-  const r = size / 2 - 4, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac))
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${P.track}" stroke-width="5"/>
-<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * f).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 ${size / 2} ${size / 2})"/>
-<text x="50%" y="54%" font-family="${FONT}" font-size="10" font-weight="700" fill="${P.hi}" text-anchor="middle" dominant-baseline="middle">${Math.round(f * 100)}%</text>
-</svg>`
-}
-
-function svgColumns(m, w, h) {
-  const series = m.series
-  const vals = series.map((d) => (m.metric === 'cost' ? d.cost : d.tokens))
-  const max = Math.max(...vals, 0) || 1
-  const padL = 46, padB = 20, padT = 14, padR = 6
-  const pw = w - padL - padR, ph = h - padT - padB
-  const bw = pw / series.length
-  const y = (v) => padT + ph * (1 - v / max)
-  const lab = (v) => (v === 0 ? (m.metric === 'cost' ? '$0' : '0') : m.metric === 'cost' ? fmt.usd(v) : fmt.tokens(v))
-  const grid = [0, 0.5, 1].map((p) => `<line x1="${padL}" x2="${w - padR}" y1="${y(max * p).toFixed(1)}" y2="${y(max * p).toFixed(1)}" stroke="${P.track}"${p ? ' stroke-dasharray="2 3"' : ''}/><text x="${padL - 6}" y="${(y(max * p) + 3).toFixed(1)}" font-family="${FONT}" font-size="9" fill="${P.low}" text-anchor="end">${lab(max * p)}</text>`).join('')
-  const bars = series.map((d, i) => {
-    const v = vals[i]
-    const x = padL + i * bw + bw * 0.16
-    const wBar = Math.max(1.5, bw * 0.68)
-    const sel = d.day === m.day
-    const tip = `${fmt.shortDay(d.day)} · ${fmt.usd(d.cost)} · ${fmt.tokens(d.tokens)} tokens · ${d.requests} requests`
-    if (v <= 0) return `<rect x="${x.toFixed(1)}" y="${(padT + ph - 2).toFixed(1)}" width="${wBar.toFixed(1)}" height="2" rx="1" fill="${sel ? P.coral : P.track}"><title>${esc(tip)}</title></rect>`
-    const bh = Math.max(3, padT + ph - y(v))
-    const top = padT + ph - bh
-    return `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${wBar.toFixed(1)}" height="${bh.toFixed(1)}" rx="${Math.min(3, wBar / 2).toFixed(1)}" fill="url(#${sel ? 's' : 'b'})"><title>${esc(tip)}</title></rect>` +
-      (sel ? `<text x="${(x + wBar / 2).toFixed(1)}" y="${(top - 4).toFixed(1)}" font-family="${FONT}" font-size="9" font-weight="700" fill="${P.coral}" text-anchor="middle">${lab(v)}</text>` : '')
-  }).join('')
-  const xi = [0, Math.floor((series.length - 1) / 2), series.length - 1]
-  const xl = xi.map((i) => `<text x="${(padL + i * bw + bw / 2).toFixed(1)}" y="${h - 6}" font-family="${FONT}" font-size="9" fill="${P.low}" text-anchor="middle">${fmt.shortDay(series[i].day)}</text>`).join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-<defs>
-<linearGradient id="b" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${P.blueDeep}"/><stop offset="1" stop-color="${P.blueLight}"/></linearGradient>
-<linearGradient id="s" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${P.coralDeep}"/><stop offset="1" stop-color="${P.coral}"/></linearGradient>
-</defs>${grid}${bars}${xl}</svg>`
-}
-
-function svgSessions(rows, metric, currentId, w) {
-  const rh = 22, h = rows.length * rh + 4
-  const key = metric === 'cost' ? 'cost' : 'tokens'
-  const max = Math.max(...rows.map((r) => r[key]), 0) || 1
-  const labelW = Math.min(260, w * 0.42), valW = 120, barX = labelW + 10, barW = Math.max(40, w - barX - valW)
-  const body = rows.map((r, i) => {
-    const y = i * rh + 2
-    const total = (r[key] / max) * barW
-    const sub = key === 'cost' && r.cost > 0 ? total * Math.min(1, (r.subagentCost || 0) / r.cost) : 0
-    const cur = r.id === currentId
-    const title = fmt.truncate(r.title, Math.floor(labelW / 6.2))
-    const val = key === 'cost' ? `${fmt.usd(r.cost)} · ${fmt.tokens(r.tokens)}` : `${fmt.tokens(r.tokens)} · ${fmt.usd(r.cost)}`
-    return `<g><title>${esc(r.title)}${r.project ? ' · ' + esc(r.project) : ''}: ${fmt.usd(r.cost)}, ${fmt.tokens(r.tokens)} tokens, ${r.requests} requests${r.subagentCost > 0.0005 ? `, subagents ${fmt.usd(r.subagentCost)}` : ''}</title>
-${i % 2 ? `<rect x="0" y="${y - 1}" width="${w}" height="${rh}" rx="4" fill="${P.zebra}"/>` : ''}
-<circle cx="6" cy="${y + rh / 2 - 1}" r="3" fill="${cur ? P.coral : P.blue}"/>
-<text x="16" y="${y + rh / 2 + 3}" font-family="${FONT}" font-size="11" fill="${P.hi}">${esc(title)}</text>
-<rect x="${barX}" y="${y + 6}" width="${barW}" height="8" rx="4" fill="${P.track}"/>
-<rect x="${barX}" y="${y + 6}" width="${Math.max(3, total - sub).toFixed(1)}" height="8" rx="4" fill="${cur ? P.coral : P.blue}"/>
-${sub > 1 ? `<rect x="${(barX + total - sub).toFixed(1)}" y="${y + 6}" width="${sub.toFixed(1)}" height="8" rx="4" fill="${P.violet}"/>` : ''}
-<text x="${w - 2}" y="${y + rh / 2 + 3}" font-family="${FONT}" font-size="11" font-weight="600" fill="${P.mid}" text-anchor="end">${val}</text></g>`
-  }).join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`
-}
-
 // ------------------------------------------------------------------ the three cards
-
-// The countdown shows whole minutes until the last two, then m:ss. Together with tickKey()
-// this keeps the band from redrawing every second: on Desktop each redraw repaints the
-// band's SVGs, which read as flicker.
-export function countdown(ms) {
-  if (ms <= 0) return '0:00'
-  return ms >= 120_000 ? `${Math.ceil(ms / 60_000)}m` : fmt.duration(ms)
-}
-
-// Everything time-dependent the band shows. The hooks module redraws on a timer only when
-// this string changes.
-export function tickKey(m) {
-  const s = cacheStatus(m.cache, m.now)
-  return `${s.label}|${countdown(s.remaining)}|${s.frac}`
-}
-
-export function cacheStatus(cache, now) {
-  if (!cache || !cache.lastTs) return { label: 'IDLE', color: P.slate, remaining: 0, frac: 0 }
-  const remaining = cache.lastTs + cache.ttlMs - now
-  if (remaining <= 0) return { label: '○ COLD', color: P.coral, remaining: 0, frac: 0 }
-  const frac = Math.round((remaining / cache.ttlMs) * 100) / 100
-  if (remaining < Math.min(5 * 60_000, cache.ttlMs * 0.2)) return { label: '● EXPIRING', color: P.amber, remaining, frac }
-  return { label: '● WARM', color: P.teal, remaining, frac }
-}
-
-const isDesktop = (m, el) => m.surface !== 'terminal' && !!el.Svg
 
 function usageCard(el, m, h, width, inner) {
   const series = m.series || []
   const last14 = series.slice(-14).map((d) => d.cost)
-  const visual = isDesktop(m, el)
-    ? el.Svg({ source: svgSpark(last14.length ? last14 : [0, 0], Math.max(60, Math.round(inner * PX_PER_COL * 0.62)), 22), alt: 'Cost over the last 14 days', height: 22 })
-    : paint(el, sparkCells(last14.length ? last14 : [0], P.card), 'spark')
+  const visual = paint(el, sparkCells(last14.length ? last14 : [0], P.card), 'spark')
   return card(el, [
     row(el, [label(el, 'TODAY · ALL SESSIONS'), spacer(el), el.Button({ key: 'toggle', label: m.expanded ? '▼ Hide' : '▲ Breakdown', plain: true, onPress: h.toggle })]),
     m.histError && !series.length
@@ -263,9 +111,7 @@ function contextCard(el, m, width, inner) {
   const pct = Math.round((c.used / c.window) * 100)
   const segs = [{ to: Math.min(c.used, c.soft), color: P.teal }]
   if (over) segs.push({ to: c.used, color: P.slate })
-  const meter = isDesktop(m, el)
-    ? el.Svg({ source: svgMeter(c.used, c.window, c.soft, Math.max(80, Math.round(inner * PX_PER_COL))), alt: `Context ${fmt.tokens(c.used)} of ${fmt.tokens(c.window)}, soft limit ${fmt.tokens(c.soft)}`, height: 30 })
-    : paint(el, meterCells(segs, c.window, inner, P.track, { at: c.soft, ch: '►', fg: P.amber }), 'ctxbar')
+  const meter = paint(el, meterCells(segs, c.window, inner, P.track, { at: c.soft, ch: '►', fg: P.amber }), 'ctxbar')
   return card(el, [
     row(el, [label(el, 'CONTEXT WINDOW'), spacer(el), over ? chip(el, 'PAST SOFT LIMIT', P.hi, P.slate) : chip(el, `${pct}%`, P.card, P.teal)]),
     row(el, [
@@ -290,8 +136,7 @@ function cacheCard(el, m, width, inner) {
   const ttl = ttlMs ? (ttlMs >= 3_600_000 ? '1H TTL' : '5M TTL') : 'TTL –'
   const turn = m.turn && m.turn.requests ? m.turn : null
   const has = !!(c && c.lastTs)
-  const desk = isDesktop(m, el)
-  const drain = has && !desk ? paint(el, meterCells([{ to: s.frac, color: s.color }], 1, Math.max(8, Math.floor(inner * 0.35)), P.track), 'drain') : null
+  const drain = has ? paint(el, meterCells([{ to: s.frac, color: s.color }], 1, Math.max(8, Math.floor(inner * 0.35)), P.track), 'drain') : null
   const head = row(el, [label(el, 'PROMPT CACHE'), t(el, ' '), chip(el, ttl, P.mid, P.raised), spacer(el), chip(el, s.label, P.card, s.color)])
   const timeRow = row(el, [
     t(el, has ? countdown(s.remaining) : '–', { bold: true, color: P.hi }),
@@ -309,15 +154,6 @@ function cacheCard(el, m, width, inner) {
       spacer(el), t(el, `${turn.requests} req`, { color: P.low }),
     ])
     : row(el, [label(el, 'LAST TURN '), t(el, '–', { color: P.low })])
-  if (desk && has) {
-    return card(el, [
-      head,
-      row(el, [
-        el.Svg({ source: svgRing(s.frac, s.color), alt: `Cache ${Math.round(s.frac * 100)}% of its TTL left`, width: 46, height: 46 }),
-        col(el, [timeRow, startRow, turnRow], { flexGrow: 1, paddingLeft: 1 }),
-      ]),
-    ], { width, key: 'cache' })
-  }
   return card(el, [head, timeRow, startRow, turnRow], { width, key: 'cache' })
 }
 
@@ -406,20 +242,6 @@ export function breakdown(el, m, h, { columns, compact, rows = 40 }) {
   ])
   const dayRows = (m.sessionsByDay && m.sessionsByDay[m.day]) || []
 
-  if (isDesktop(m, el)) {
-    const w = Math.round(Math.min(900, inner * PX_PER_COL))
-    const list = dayRows.slice(0, compact ? 8 : 16)
-    return card(el, [
-      header,
-      el.Svg({ source: svgColumns(m, w, compact ? 120 : 160), alt: `Daily ${m.metric} for the last ${m.series.length} days`, height: compact ? 120 : 160 }),
-      row(el, [label(el, `SESSIONS · ${fmt.shortDay(m.day)}`), spacer(el), t(el, '● main  ', { color: P.blue }), t(el, '● subagents  ', { color: P.violet }), t(el, '● this session', { color: P.coral })]),
-      list.length
-        ? el.Svg({ source: svgSessions(list, m.metric, m.currentSessionId, w), alt: `Sessions on ${fmt.shortDay(m.day)}` })
-        : t(el, 'No usage recorded on this day.', { color: P.mid }),
-      m.histError ? t(el, m.histError, { color: P.amber }) : null,
-    ], { key: 'breakdown' })
-  }
-
   const chartRows = Math.max(2, Math.min(compact ? 5 : 8, rows - 6))
   const sessionCount = Math.max(1, Math.min(compact ? 6 : 14, rows - 3 - chartRows))
   return card(el, [
@@ -468,7 +290,15 @@ function compactCard(el, m, h, columns) {
 const CARD_ROWS = 4
 const MIN_BREAKDOWN_ROWS = 7
 
+// Terminal bands shorter than this can't hold the breakdown above the cards; the hooks
+// module opens the breakdown as a pane instead.
+export const BREAKDOWN_MIN_BAND_ROWS = CARD_ROWS + 1 + MIN_BREAKDOWN_ROWS
+
+// Desktop draws whole cards as SVG (desktop.js); everything below is the terminal.
+const isDesktop = (m, el) => m.surface !== 'terminal' && !!el.Svg
+
 export function band(el, m, h, columns, maxRows = 40) {
+  if (isDesktop(m, el)) return desktopBand(el, m, h, columns)
   const wide = columns >= 110
   let cards
   if (wide) {
@@ -482,14 +312,14 @@ export function band(el, m, h, columns, maxRows = 40) {
   } else {
     cards = compactCard(el, m, h, columns)
   }
+  // Too short for the breakdown: the hooks module shows it in a pane, so draw the cards alone.
   const spare = maxRows - CARD_ROWS - 1
-  const top = !m.expanded ? null
-    : spare >= MIN_BREAKDOWN_ROWS ? breakdown(el, m, h, { columns, compact: true, rows: spare })
-    : t(el, 'Not enough room for the breakdown here: run /usage-hud pane', { color: P.amber })
+  const top = m.expanded && spare >= MIN_BREAKDOWN_ROWS ? breakdown(el, m, h, { columns, compact: true, rows: spare }) : null
   return col(el, [top, cards], { rowGap: top ? 1 : 0 })
 }
 
 export function pane(el, m, h, columns) {
+  if (isDesktop(m, el)) return desktopPane(el, m, h, columns)
   const w = Math.max(30, columns)
   return col(el, [
     breakdown(el, m, h, { columns: w, compact: false }),
