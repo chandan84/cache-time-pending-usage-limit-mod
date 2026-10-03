@@ -170,7 +170,7 @@ claude plugin install usage-hud@usage-hud-mods
 
 | Option | Default | Meaning |
 | :- | :- | :- |
-| `context_soft_limit` | `240000` | Where the context meter turns from teal to hatched gray, marked by the amber **►** |
+| `context_soft_limit` | `240000` | Where the context meter turns from teal to hatched gray, marked by the amber **▼** |
 | `history_days` | `30` | Days in the daily chart |
 
 From a shell: `echo '{"context_soft_limit":"200000","history_days":"30"}' | claude plugin configure usage-hud@usage-hud-mods --values-stdin` (values are strings). Restart the session to apply.

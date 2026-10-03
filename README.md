@@ -7,7 +7,7 @@ A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that 
 | Card | What it shows |
 | :- | :- |
 | **Today · all sessions** | Tokens and API-equivalent cost **today across every local session**, a 14-day trend, and the all-time total. **▲ Breakdown** opens, on demand, a 30-day chart (cost or tokens) with the **per-session split** for the selected day. **◄ ►** moves between days, subagent spend shows in violet, and this session in coral. |
-| **Context window** | This conversation's context against the model's window. The meter is **teal up to a 240K soft limit**, marked with an amber **►**; anything past it is **hatched gray** as "not optimal". Shows tokens free and the distance to or past the soft limit. |
+| **Context window** | This conversation's context against the model's window. The meter is **teal up to a 240K soft limit**, marked by an amber **▼** above the bar; anything past it is **hatched gray** as "not optimal". Shows tokens free and the distance to or past the soft limit. |
 | **Prompt cache** | The TTL the API actually wrote (1h or 5m), when the current **warm streak started**, the last cache hit, a **countdown** to expiry from the last request (whole minutes, then m:ss in the last two; teal → amber → coral, with a ring gauge in Desktop), and the **last turn's tokens and cost**, subagents included. |
 
 Desktop draws each card as one rounded SVG image (gradient columns, an area sparkline, a ring gauge, a gradient context meter) with its own typography, and redraws only when a figure changes, so nothing flickers. The terminal draws the same cards with solid color-filled cells and half-cell edges on a matte card surface, in 24-bit color. The band shows the three cards by default. The breakdown opens on demand: in its own pane on Desktop, and above the cards in a terminal (or as a pane when the terminal is too short).
@@ -34,6 +34,7 @@ Check a machine first with `scripts/check-prereqs.ps1` (Windows) or `scripts/che
 | `/usage-hud pane` | Open the breakdown in a pane |
 | `/usage-hud report` | Print a text summary (works where nothing is drawn, such as `claude -p`) |
 | `/usage-hud refresh` | Re-read history now |
+| `/usage-hud limit 300k` | Move the context soft limit (saved; overrides the plugin option). `/usage-hud limit reset` goes back to the option |
 
 Options (`/plugin configure usage-hud@usage-hud-mods`): `context_soft_limit` (default `240000`) and `history_days` (default `30`).
 

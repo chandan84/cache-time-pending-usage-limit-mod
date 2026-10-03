@@ -35,6 +35,7 @@ let lastTick = ''           // tickKey() at the last timer redraw
 let bandRows = 40           // the band's maxRows at its last draw, and its surface
 let bandSurface = 'terminal'
 let paneOpen = false        // the breakdown pane is showing
+let softOverride = null     // `/usage-hud limit`, saved in the store; wins over the plugin setting
 
 // ------------------------------------------------------------------ data
 
@@ -115,7 +116,7 @@ function shiftDay(delta) {
 function viewModel(surface) {
   const now = Date.now()
   const hs = hist && hist.session && hist.session.id === sessionId ? hist.session : null
-  const soft = Number(options.context_soft_limit) || 240_000
+  const soft = softLimit()
 
   const model = (live && live.model) || (hs && hs.model) || null
   const used = (live && live.contextTokens) || (hs && hs.contextTokens) || 0
@@ -173,6 +174,18 @@ async function toggleBreakdown($) {
   $.ui.invalidate('ui.render')
 }
 
+function softLimit() {
+  return softOverride || Number(options.context_soft_limit) || 240_000
+}
+
+// "300k", "1.2m", "300000" -> tokens; null when it isn't a positive amount.
+function parseTokens(s) {
+  const m = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(String(s || '').trim().replace(/[,_]/g, ''))
+  if (!m) return null
+  const n = Math.round(Number(m[1]) * ({ k: 1e3, m: 1e6 }[m[2].toLowerCase()] || 1))
+  return n > 0 ? n : null
+}
+
 // Only the Cost/Tokens choice outlives a session; the breakdown always starts closed.
 async function saveMetric($) {
   await $.store.set('ui', { metric: ui.metric })
@@ -186,13 +199,15 @@ export function register(on, opts) {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'usage-hud',
-      description: 'Usage HUD: toggle the daily/session breakdown, or `pane`, `report`, `refresh`',
-      argumentHint: '[pane|report|refresh]',
+      description: 'Usage HUD: toggle the daily/session breakdown, or `pane`, `report`, `refresh`, `limit 300k` (context soft limit)',
+      argumentHint: '[pane|report|refresh|limit <tokens>|limit reset]',
       immediate: true,
     })
     const saved = await $.store.get('ui')
     ui.expanded = false
     if (saved && (saved.metric === 'tokens' || saved.metric === 'cost')) ui.metric = saved.metric
+    const limit = await $.store.get('softLimit')
+    softOverride = typeof limit === 'number' && limit > 0 ? limit : null
     await loadSessionFacts($)
     await runScan($)
     // The countdown changes once a minute (every second in its last two), so check each second
@@ -255,6 +270,20 @@ export function register(on, opts) {
       await $.ui.open({ id: PANE, title: 'Usage', focus: true, closeOnEscape: true })
       paneOpen = true
       return {}
+    }
+    if (arg === 'limit' || arg.startsWith('limit ')) {
+      const v = arg.slice(5).trim()
+      if (v === 'reset' || v === 'default') {
+        softOverride = null
+        await $.store.set('softLimit', null)
+      } else if (v) {
+        const n = parseTokens(v)
+        if (!n) return { text: `Not a token amount: "${v}". Try /usage-hud limit 300k` }
+        softOverride = n
+        await $.store.set('softLimit', n)
+      }
+      $.ui.invalidate('ui.render')
+      return { text: `Context soft limit: ${softLimit().toLocaleString('en-US')} tokens${softOverride ? '' : ' (plugin setting)'}.` }
     }
     if (arg === 'refresh') {
       await runScan($)

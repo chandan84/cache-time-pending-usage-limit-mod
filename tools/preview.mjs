@@ -72,7 +72,10 @@ img{max-width:100%;height:auto;display:block}
 </style>
 <h2>Band · Desktop · light app theme</h2><div class="frame">${html(band(EL, model(false, 'desktop'), H, cols, 30))}<div class="prompt">Reply to Claude…</div></div>
 <h2>Band · Desktop · dark app theme</h2><div class="frame dark">${html(band(EL, model(false, 'desktop'), H, cols, 30))}<div class="prompt">Reply to Claude…</div></div>
-<h2>Breakdown pane · Desktop (on demand)</h2><div class="frame dark" style="width:${110 * COL}px">${html(pane(EL, model(true, 'desktop'), H, 110))}</div>`
+<h2>Band · Desktop · narrow (breakdown pane open beside it)</h2><div class="frame dark" style="width:${90 * COL}px">${html(band(EL, model(false, 'desktop'), H, 90, 30))}</div>
+<h2>Band · Desktop · very narrow</h2><div class="frame dark" style="width:${62 * COL}px">${html(band(EL, model(false, 'desktop'), H, 62, 30))}</div>
+<h2>Breakdown pane · Desktop · docked</h2><div class="frame dark" style="width:${50 * COL}px">${html(pane(EL, model(true, 'desktop'), H, 50))}</div>
+<h2>Breakdown pane · Desktop · wide</h2><div class="frame dark" style="width:${110 * COL}px">${html(pane(EL, model(true, 'desktop'), H, 110))}</div>`
 
 const out = process.argv[2] || path.join(here, '..', 'preview.html')
 fs.writeFileSync(out, page)

@@ -103,7 +103,7 @@ function contextCard(el, m, width, inner) {
     return card(el, [
       label(el, 'CONTEXT WINDOW'),
       t(el, 'Waiting for the first response', { color: P.mid }),
-      paint(el, meterCells([], win, inner, P.track, { at: m.softLimit || 240_000, ch: '►', fg: P.amber }), 'ctxbar'),
+      paint(el, meterCells([], win, inner, P.track, { at: m.softLimit || 240_000, ch: '▼', fg: P.amber }), 'ctxbar'),
       t(el, `${fmt.tokens(win)} window · soft limit ${fmt.tokens(m.softLimit || 240_000)}`, { color: P.low }),
     ], { width, key: 'ctx' })
   }
@@ -111,7 +111,7 @@ function contextCard(el, m, width, inner) {
   const pct = Math.round((c.used / c.window) * 100)
   const segs = [{ to: Math.min(c.used, c.soft), color: P.teal }]
   if (over) segs.push({ to: c.used, color: P.slate })
-  const meter = paint(el, meterCells(segs, c.window, inner, P.track, { at: c.soft, ch: '►', fg: P.amber }), 'ctxbar')
+  const meter = paint(el, meterCells(segs, c.window, inner, P.track, { at: c.soft, ch: '▼', fg: P.amber }), 'ctxbar')
   return card(el, [
     row(el, [label(el, 'CONTEXT WINDOW'), spacer(el), over ? chip(el, 'PAST SOFT LIMIT', P.hi, P.slate) : chip(el, `${pct}%`, P.card, P.teal)]),
     row(el, [
@@ -124,7 +124,7 @@ function contextCard(el, m, width, inner) {
     row(el, [
       t(el, over ? `${fmt.tokens(c.used - c.soft)} past ${fmt.tokens(c.soft)}` : `${fmt.tokens(c.soft - c.used)} to ${fmt.tokens(c.soft)}`, { color: over ? P.amber : P.low }),
       spacer(el),
-      t(el, '► ', { color: P.amber }), t(el, `${fmt.tokens(c.soft)} soft limit`, { color: P.low }),
+      t(el, '▼ ', { color: P.amber }), t(el, `${fmt.tokens(c.soft)} soft limit`, { color: P.low }),
     ]),
   ], { width, key: 'ctx' })
 }
@@ -231,9 +231,9 @@ export function breakdown(el, m, h, { columns, compact, rows = 40 }) {
     t(el, ' │ ', { color: P.low }),
     el.Button({ key: 'm-tok', label: 'Tokens', plain: true, dimColor: m.metric !== 'tokens', onPress: () => h.metric('tokens') }),
     t(el, '    '),
-    el.Button({ key: 'prev', label: '◄', plain: true, onPress: h.prevDay }),
+    el.Button({ key: 'prev', label: '‹', plain: true, onPress: h.prevDay }),
     chip(el, fmt.shortDay(m.day), P.card, P.coral),
-    el.Button({ key: 'next', label: '►', plain: true, onPress: h.nextDay }),
+    el.Button({ key: 'next', label: '›', plain: true, onPress: h.nextDay }),
     t(el, '  '),
     el.Button({ key: 'today', label: 'Today', plain: true, onPress: h.today }),
     spacer(el),
@@ -272,7 +272,7 @@ function compactCard(el, m, h, columns) {
     c
       ? row(el, [
         label(el, 'CONTEXT '), t(el, fmt.tokens(c.used), { bold: true, color: P.hi }), t(el, '/' + fmt.tokens(c.window) + ' ', { color: P.mid }),
-        paint(el, meterCells(c.used > c.soft ? [{ to: c.soft, color: P.teal }, { to: c.used, color: P.slate }] : [{ to: c.used, color: P.teal }], c.window, barCells, P.track, { at: c.soft, ch: '►', fg: P.amber }), 'ctxbar'),
+        paint(el, meterCells(c.used > c.soft ? [{ to: c.soft, color: P.teal }, { to: c.used, color: P.slate }] : [{ to: c.used, color: P.teal }], c.window, barCells, P.track, { at: c.soft, ch: '▼', fg: P.amber }), 'ctxbar'),
         t(el, ' ' + (c.used <= c.soft ? `${fmt.tokens(c.soft - c.used)} to ${fmt.tokens(c.soft)}` : `${fmt.tokens(c.used - c.soft)} past ${fmt.tokens(c.soft)}`), { color: c.used <= c.soft ? P.low : P.amber }),
       ])
       : row(el, [label(el, 'CONTEXT '), t(el, 'waiting for the first response', { color: P.mid })]),

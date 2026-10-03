@@ -74,7 +74,7 @@ test('terminal band draws text meters with the soft-limit arrow', () => {
   const tree = band(EL, model('terminal'), H, 140)
   const all = texts(tree).join('\n')
   assert.ok(!types(tree).has('Svg'))
-  assert.match(all, /►/)                     // soft-limit marker in the bar
+  assert.match(all, /▼/)                     // soft-limit marker in the bar
   assert.match(all, /past 240K/)
   assert.match(all, /1H TTL/)
   assert.match(all, /SESSIONS · /)
