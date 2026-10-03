@@ -1,0 +1,24 @@
+{
+  "name": "usage-hud",
+  "version": "0.1.0",
+  "description": "Three-box HUD above the prompt: tokens and API-equivalent cost across all sessions (daily and per-session breakdown), context-window meter with a soft limit, and prompt-cache warmth countdown with last-turn tokens and cost.",
+  "author": { "name": "Chandan Mishra" },
+  "homepage": "https://github.com/chandan84/cache-time-pending-usage-limit-mod",
+  "repository": "https://github.com/chandan84/cache-time-pending-usage-limit-mod",
+  "license": "MIT",
+  "keywords": ["mod", "usage", "cost", "tokens", "context", "prompt-cache"],
+  "userConfig": {
+    "context_soft_limit": {
+      "type": "number",
+      "title": "Context soft limit (tokens)",
+      "description": "Context use past this mark is shaded gray as not optimal. Default 240000.",
+      "default": 240000
+    },
+    "history_days": {
+      "type": "number",
+      "title": "Days in the daily chart",
+      "description": "How many days the breakdown chart shows. Default 30.",
+      "default": 30
+    }
+  }
+}

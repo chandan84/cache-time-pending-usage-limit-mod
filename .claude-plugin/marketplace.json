@@ -1,0 +1,12 @@
+{
+  "name": "usage-hud-mods",
+  "description": "Claude Code mods by chandan84",
+  "owner": { "name": "Chandan Mishra" },
+  "plugins": [
+    {
+      "name": "usage-hud",
+      "source": "./plugins/usage-hud",
+      "description": "Band above the prompt: token/cost tracker across all sessions (with daily and per-session breakdown), context-window meter with a 240K soft limit, and prompt-cache warmth countdown with last-turn cost."
+    }
+  ]
+}
