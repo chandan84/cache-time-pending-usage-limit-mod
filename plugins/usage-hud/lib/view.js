@@ -206,12 +206,26 @@ ${sub > 1 ? `<rect x="${(barX + total - sub).toFixed(1)}" y="${y + 6}" width="${
 
 // ------------------------------------------------------------------ the three cards
 
+// The countdown shows whole minutes until the last two, then m:ss. Together with tickKey()
+// this keeps the band from redrawing every second: on Desktop each redraw repaints the
+// band's SVGs, which read as flicker.
+export function countdown(ms) {
+  if (ms <= 0) return '0:00'
+  return ms >= 120_000 ? `${Math.ceil(ms / 60_000)}m` : fmt.duration(ms)
+}
+
+// Everything time-dependent the band shows. The hooks module redraws on a timer only when
+// this string changes.
+export function tickKey(m) {
+  const s = cacheStatus(m.cache, m.now)
+  return `${s.label}|${countdown(s.remaining)}|${s.frac}`
+}
+
 export function cacheStatus(cache, now) {
   if (!cache || !cache.lastTs) return { label: 'IDLE', color: P.slate, remaining: 0, frac: 0 }
-  if (cache.active) return { label: '● LIVE', color: P.teal, remaining: cache.ttlMs, frac: 1 }
   const remaining = cache.lastTs + cache.ttlMs - now
   if (remaining <= 0) return { label: '○ COLD', color: P.coral, remaining: 0, frac: 0 }
-  const frac = remaining / cache.ttlMs
+  const frac = Math.round((remaining / cache.ttlMs) * 100) / 100
   if (remaining < Math.min(5 * 60_000, cache.ttlMs * 0.2)) return { label: '● EXPIRING', color: P.amber, remaining, frac }
   return { label: '● WARM', color: P.teal, remaining, frac }
 }
@@ -250,7 +264,7 @@ function contextCard(el, m, width, inner) {
   const segs = [{ to: Math.min(c.used, c.soft), color: P.teal }]
   if (over) segs.push({ to: c.used, color: P.slate })
   const meter = isDesktop(m, el)
-    ? el.Svg({ source: svgMeter(c.used, c.window, c.soft, Math.max(80, Math.round(inner * PX_PER_COL))), alt: `Context ${fmt.tokens(c.used)} of ${fmt.tokens(c.window)}, soft limit ${fmt.tokens(c.soft)}`, height: 30, isInteractive: true })
+    ? el.Svg({ source: svgMeter(c.used, c.window, c.soft, Math.max(80, Math.round(inner * PX_PER_COL))), alt: `Context ${fmt.tokens(c.used)} of ${fmt.tokens(c.window)}, soft limit ${fmt.tokens(c.soft)}`, height: 30 })
     : paint(el, meterCells(segs, c.window, inner, P.track, { at: c.soft, ch: '►', fg: P.amber }), 'ctxbar')
   return card(el, [
     row(el, [label(el, 'CONTEXT WINDOW'), spacer(el), over ? chip(el, 'PAST SOFT LIMIT', P.hi, P.slate) : chip(el, `${pct}%`, P.card, P.teal)]),
@@ -280,7 +294,7 @@ function cacheCard(el, m, width, inner) {
   const drain = has && !desk ? paint(el, meterCells([{ to: s.frac, color: s.color }], 1, Math.max(8, Math.floor(inner * 0.35)), P.track), 'drain') : null
   const head = row(el, [label(el, 'PROMPT CACHE'), t(el, ' '), chip(el, ttl, P.mid, P.raised), spacer(el), chip(el, s.label, P.card, s.color)])
   const timeRow = row(el, [
-    t(el, has ? fmt.duration(s.remaining) : '–', { bold: true, color: P.hi }),
+    t(el, has ? countdown(s.remaining) : '–', { bold: true, color: P.hi }),
     t(el, has ? ' left  ' : '', { color: P.mid }),
     drain,
     spacer(el),
@@ -397,10 +411,10 @@ export function breakdown(el, m, h, { columns, compact, rows = 40 }) {
     const list = dayRows.slice(0, compact ? 8 : 16)
     return card(el, [
       header,
-      el.Svg({ source: svgColumns(m, w, compact ? 120 : 160), alt: `Daily ${m.metric} for the last ${m.series.length} days`, isInteractive: true, height: compact ? 120 : 160 }),
+      el.Svg({ source: svgColumns(m, w, compact ? 120 : 160), alt: `Daily ${m.metric} for the last ${m.series.length} days`, height: compact ? 120 : 160 }),
       row(el, [label(el, `SESSIONS · ${fmt.shortDay(m.day)}`), spacer(el), t(el, '● main  ', { color: P.blue }), t(el, '● subagents  ', { color: P.violet }), t(el, '● this session', { color: P.coral })]),
       list.length
-        ? el.Svg({ source: svgSessions(list, m.metric, m.currentSessionId, w), alt: `Sessions on ${fmt.shortDay(m.day)}`, isInteractive: true })
+        ? el.Svg({ source: svgSessions(list, m.metric, m.currentSessionId, w), alt: `Sessions on ${fmt.shortDay(m.day)}` })
         : t(el, 'No usage recorded on this day.', { color: P.mid }),
       m.histError ? t(el, m.histError, { color: P.amber }) : null,
     ], { key: 'breakdown' })
@@ -442,7 +456,7 @@ function compactCard(el, m, h, columns) {
       : row(el, [label(el, 'CONTEXT '), t(el, 'waiting for the first response', { color: P.mid })]),
     row(el, [
       label(el, 'CACHE '), chip(el, ttlMs >= 3_600_000 ? '1H' : '5M', P.mid, P.raised), t(el, ' '), chip(el, s.label, P.card, s.color),
-      t(el, m.cache && m.cache.lastTs ? ` ${fmt.duration(s.remaining)} left · ends ${fmt.clock(m.cache.lastTs + m.cache.ttlMs)}` : '', { color: P.mid }),
+      t(el, m.cache && m.cache.lastTs ? ` ${countdown(s.remaining)} left · ends ${fmt.clock(m.cache.lastTs + m.cache.ttlMs)}` : '', { color: P.mid }),
       spacer(el),
       t(el, turn ? `${turn.running ? 'turn' : 'last turn'} ${fmt.tokens(turn.tokens)} · ${fmt.usd(turn.cost)}` : '', { color: P.hi }),
     ]),

@@ -63,7 +63,7 @@ function model(surface, extra = {}) {
     todayCost: snap.todayAgg.cost, todayTokens: snap.todayAgg.tokens, totalCost: snap.total.cost,
     series: snap.series, sessionsByDay: snap.sessionsByDay, histError: null,
     ctx: { used: 251_302, window: 1_000_000, soft: 240_000 },
-    cache: { lastTs: NOW - 60_000, warmSince: NOW - 600_000, ttlMs: HOUR, active: false },
+    cache: { lastTs: NOW - 60_000, warmSince: NOW - 600_000, ttlMs: HOUR },
     turn: { tokens: 251_302, cost: 0.06, requests: 1, running: false },
     ...extra,
   }
@@ -124,4 +124,25 @@ test('an expanded band draws before the first history scan lands', () => {
     assert.match(texts(band(EL, m, H, 150, 30)).join('\n'), /Reading history/)
     assert.ok(pane(EL, m, H, 100))
   }
+})
+
+test('the band only needs a timer redraw when the countdown text changes', async () => {
+  const { tickKey, countdown } = await import('../../lib/view.js')
+  const cache = { lastTs: NOW, warmSince: NOW, ttlMs: HOUR }
+  const key = (msLater) => tickKey({ cache, now: NOW + msLater })
+  // 50 minutes left: whole minutes, so 30 seconds later nothing changed
+  assert.equal(key(10 * 60_000), key(10 * 60_000 + 30_000))
+  assert.notEqual(key(10 * 60_000), key(11 * 60_000))
+  // last two minutes: seconds
+  assert.equal(countdown(90_000), '1:30')
+  assert.equal(countdown(50 * 60_000), '50m')
+  assert.notEqual(key(HOUR - 90_000), key(HOUR - 89_000))
+})
+
+test('no SVG is interactive (framed): frames flicker when the band redraws', () => {
+  const svgs = []
+  const walk = (n) => { if (n && n.type === 'Svg') svgs.push(n); for (const c of (n && n.props && n.props.children) || []) walk(c) }
+  walk(band(EL, model('desktop', { expanded: false }), H, 140)); walk(band(EL, model('desktop', { expanded: true }), H, 140, 40)); walk(pane(EL, model('desktop'), H, 110))
+  assert.ok(svgs.length >= 3)
+  assert.ok(svgs.every((s) => !s.props.isInteractive))
 })

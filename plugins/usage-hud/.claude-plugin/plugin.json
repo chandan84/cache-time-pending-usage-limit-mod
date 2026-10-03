@@ -1,6 +1,6 @@
 {
   "name": "usage-hud",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Three-box HUD above the prompt: tokens and API-equivalent cost across all sessions (daily and per-session breakdown), context-window meter with a soft limit, and prompt-cache warmth countdown with last-turn tokens and cost.",
   "author": { "name": "Chandan Mishra" },
   "homepage": "https://github.com/chandan84/cache-time-pending-usage-limit-mod",

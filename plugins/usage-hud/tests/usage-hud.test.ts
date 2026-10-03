@@ -118,7 +118,7 @@ test('turn.step updates context, cache and the running turn live', async ($, on)
   const ui = await $.ui.mount(BAND('terminal'))
   expect(await ui.find({ type: 'Text', text: /^403K$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'THIS TURN ' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: ' ● LIVE ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' ● WARM ' })).toBeDefined()
 })
 
 test('/usage-hud report prints a text summary', async ($, on) => {

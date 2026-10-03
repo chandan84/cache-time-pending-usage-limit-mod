@@ -11,7 +11,7 @@
 
 import { createPricer, normalizeUsage, totalTokens, contextTokens } from '../lib/pricing.js'
 import { localDay } from '../lib/format.js'
-import { band, pane, textSummary } from '../lib/view.js'
+import { band, pane, textSummary, tickKey } from '../lib/view.js'
 
 const PANE = 'usage-hud'
 const HOUR = 3_600_000
@@ -31,6 +31,7 @@ let bandSeen = false        // set once the engine raises AbovePrompt
 let live = null             // this session, from turn.step: { model, contextTokens, lastRequestTs, warmSince }
 let turn = null             // { tokens, cost, requests, startTs, running }
 const ui = { expanded: false, metric: 'cost', day: null }
+let lastTick = ''           // tickKey() at the last timer redraw
 
 // ------------------------------------------------------------------ data
 
@@ -139,7 +140,7 @@ function viewModel(surface) {
     ctxWindow: window,
     softLimit: soft,
     ttlMs: ttlMs(),
-    cache: lastTs ? { lastTs, warmSince, ttlMs: ttlMs(), active: !!(turn && turn.running) } : null,
+    cache: lastTs ? { lastTs, warmSince, ttlMs: ttlMs() } : null,
     turn: lastTurn,
   }
 }
@@ -163,8 +164,15 @@ export function register(on, opts) {
     }
     await loadSessionFacts($)
     await runScan($)
-    // Countdown and "time left" need a redraw every second; history refreshes in the background.
-    $.clock.every(1000, () => $.ui.invalidate('ui.render'))
+    // The countdown changes once a minute (every second in its last two), so check each second
+    // and redraw only when what the band shows has changed. Redrawing every second repaints
+    // the band's SVGs on Desktop, which flickers.
+    $.clock.every(1000, () => {
+      const key = tickKey(viewModel('terminal'))
+      if (key === lastTick) return
+      lastTick = key
+      $.ui.invalidate('ui.render')
+    })
     $.clock.every(SCAN_EVERY_MS, () => runScan($))
     // Hosts that don't raise the band (older Desktop builds): show the HUD as a pane instead.
     $.clock.after(4000, async () => {
