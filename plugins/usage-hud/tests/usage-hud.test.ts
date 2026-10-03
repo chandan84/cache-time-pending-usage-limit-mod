@@ -23,7 +23,7 @@ function fixtureLedger() {
   return l
 }
 
-function stubSession(on: any, scanOut: string) {
+function stubSession(on: any, scanOut: string, run: any = () => ({ value: { exitCode: 0, stdout: scanOut, stderr: '' } })) {
   mock.clock(on, { now: NOW })
   mock.env(on, {})
   const saved = new Map<string, unknown>()
@@ -34,9 +34,10 @@ function stubSession(on: any, scanOut: string) {
   on('settings.read', () => ({ value: { promptCacheTtl: '1h' } }))
   on('session.usage', () => ({ value: { context: { window: 1_000_000 }, rateLimits: [] } }))
   on('session.surfaces', () => ({ value: ['terminal'] }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: scanOut, stderr: '' } }))
+  on('process.run', run)
   on('session.start', () => ({ cwd: '/work/hud' }))
-  on('ui.render', () => null)
+  // What other mods (none here) would draw in the band beneath ours
+  on('ui.render', () => ({ type: 'Box', props: {}, children: [] }))
   return saved
 }
 
@@ -129,9 +130,7 @@ test('/usage-hud report prints a text summary', async ($, on) => {
 })
 
 test('a missing node shows a hint instead of failing', async ($, on) => {
-  stubSession(on, '')
-  // Re-register process.run to fail: the later stub answers first
-  on('process.run', () => ({ deny: 'spawn node ENOENT' }))
+  stubSession(on, '', () => ({ deny: 'spawn node ENOENT' }))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
   const ui = await $.ui.mount(BAND('terminal'))
   expect(await ui.find({ type: 'Text', text: /History/ })).toBeDefined()

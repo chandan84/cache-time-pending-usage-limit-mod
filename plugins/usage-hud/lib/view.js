@@ -52,17 +52,19 @@ function sparkline(values) {
 function usageBox(el, m, h, width) {
   const series = m.series || []
   const last = series.slice(-14).map((d) => d.cost)
-  const label = m.expanded ? '▾ Hide' : '▴ Breakdown'
+  const label = m.expanded ? '▼ Hide' : '▲ Breakdown'
   return col(el, [
     row(el, [t(el, 'Today · all sessions', { color: C.muted }), el.Box({ flexGrow: 1 }), el.Button({ key: 'toggle', label, plain: true, onPress: h.toggle })]),
     m.histError && !series.length
       ? t(el, m.histError, { color: C.warn })
       : row(el, [t(el, fmt.usd(m.todayCost), { bold: true }), t(el, '  ' + fmt.tokens(m.todayTokens) + ' tok', { color: C.muted })]),
     row(el, [
-      t(el, sparkline(last), { color: C.accent }),
-      t(el, '  14d · all time ' + fmt.usd(m.totalCost), { color: C.muted }),
+      t(el, sparkline(last), { color: C.accent, wrap: 'end' }),
+      t(el, ' 14d', { color: C.muted }),
+      el.Box({ flexGrow: 1 }),
+      t(el, 'total ' + fmt.usd(m.totalCost), { color: C.muted }),
     ]),
-  ], { borderStyle: 'round', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
+  ], { borderStyle: 'single', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
 }
 
 function contextBarCells(used, window, soft, cells) {
@@ -71,10 +73,10 @@ function contextBarCells(used, window, soft, cells) {
   const filled = used > 0 ? Math.max(1, Math.min(cells, Math.round(used / scale))) : 0
   const out = []
   for (let i = 0; i < cells; i++) {
-    if (i === mark) out.push(['▶', C.warn])
+    if (i === mark) out.push(['►', C.warn])
     out.push(i < filled ? ['█', i < mark ? C.good : C.over] : ['░', C.track])
   }
-  if (mark >= cells) out.push(['▶', C.warn])
+  if (mark >= cells) out.push(['►', C.warn])
   return out
 }
 
@@ -98,8 +100,8 @@ function contextSvg(used, window, soft, w = 300) {
 function contextBox(el, m, width, barCells) {
   const c = m.ctx
   if (!c) {
-    return col(el, [t(el, 'Context window', { color: C.muted }), t(el, 'waiting for the first response…', { color: C.muted }), t(el, ' ')],
-      { borderStyle: 'round', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
+    return col(el, [t(el, 'Context window', { color: C.muted }), t(el, 'waiting for the first response…', { color: C.muted }), t(el, m.ctxWindow ? fmt.tokens(m.ctxWindow) + ' window · soft limit ' + fmt.tokens(m.softLimit) : ' ', { color: C.muted })],
+      { borderStyle: 'single', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
   }
   const left = Math.max(0, c.window - c.used)
   const toSoft = c.soft - c.used
@@ -116,7 +118,7 @@ function contextBox(el, m, width, barCells) {
     meter,
     t(el, `${fmt.tokens(left)} left · ` + (toSoft >= 0 ? `${fmt.tokens(toSoft)} to ${fmt.tokens(c.soft)}` : `${fmt.tokens(-toSoft)} past ${fmt.tokens(c.soft)}`),
       { color: toSoft >= 0 ? C.muted : C.over }),
-  ], { borderStyle: 'round', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
+  ], { borderStyle: 'single', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
 }
 
 export function cacheStatus(cache, now) {
@@ -131,7 +133,8 @@ export function cacheStatus(cache, now) {
 function cacheBox(el, m, width) {
   const c = m.cache
   const s = cacheStatus(c, m.now)
-  const ttl = c ? (c.ttlMs >= 3_600_000 ? '1h' : '5m') : '–'
+  const ttlMs = c ? c.ttlMs : m.ttlMs
+  const ttl = ttlMs ? (ttlMs >= 3_600_000 ? '1h' : '5m') : '–'
   const turn = m.turn
   return col(el, [
     row(el, [
@@ -153,7 +156,7 @@ function cacheBox(el, m, width) {
         t(el, ` · ${turn.requests} req`, { color: C.muted }),
       ])
       : t(el, 'Last turn –', { color: C.muted }),
-  ], { borderStyle: 'round', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
+  ], { borderStyle: 'single', borderColor: C.border, paddingX: 1, width, flexShrink: 1 })
 }
 
 // ---------------------------------------------------------------- breakdown (daily + sessions)
@@ -219,7 +222,11 @@ function sessionRows(el, m, maxRows, barCells, titleWidth) {
   })
 }
 
-export function breakdown(el, m, h, { columns, compact }) {
+// rows: the height budget. Fixed rows are the border (2), controls, axis labels and the
+// "Sessions on" heading; the chart and the session list share the rest.
+export function breakdown(el, m, h, { columns, compact, rows = 40 }) {
+  const chartRows = Math.max(2, Math.min(compact ? 4 : 6, rows - 8))
+  const sessionCount = Math.max(1, Math.min(compact ? 6 : 14, rows - 5 - chartRows))
   const sel = m.series.find((d) => d.day === m.day) || { cost: 0, tokens: 0, requests: 0 }
   const controls = row(el, [
     t(el, 'Daily ', { bold: true }),
@@ -227,16 +234,16 @@ export function breakdown(el, m, h, { columns, compact }) {
     t(el, ' · ', { color: C.muted }),
     el.Button({ key: 'm-tok', label: 'Tokens', plain: true, dimColor: m.metric !== 'tokens', onPress: () => h.metric('tokens') }),
     t(el, '   '),
-    el.Button({ key: 'prev', label: '◀', plain: true, onPress: h.prevDay }),
+    el.Button({ key: 'prev', label: '◄', plain: true, onPress: h.prevDay }),
     t(el, ' ' + fmt.shortDay(m.day) + ' ', { bold: true, color: C.select }),
-    el.Button({ key: 'next', label: '▶', plain: true, onPress: h.nextDay }),
+    el.Button({ key: 'next', label: '►', plain: true, onPress: h.nextDay }),
     t(el, '  '),
     el.Button({ key: 'today', label: 'Today', plain: true, onPress: h.today }),
     t(el, `   ${fmt.usd(sel.cost)} · ${fmt.tokens(sel.tokens)} tok · ${sel.requests} req`, { color: C.muted }),
   ], { columnGap: 0 })
 
   const chart = m.surface === 'terminal' || !el.Svg
-    ? dailyTerminal(el, m, Math.max(20, columns - 10), compact ? 4 : 6)
+    ? dailyTerminal(el, m, Math.max(20, columns - 10), chartRows)
     : el.Svg({ source: dailySvg(m, Math.min(720, Math.max(320, columns * 7)), compact ? 110 : 150), alt: `Daily ${m.metric} for the last ${m.series.length} days`, isInteractive: true })
 
   const titleWidth = Math.max(16, columns - 36)
@@ -244,23 +251,60 @@ export function breakdown(el, m, h, { columns, compact }) {
     controls,
     chart,
     t(el, `Sessions on ${fmt.shortDay(m.day)}`, { bold: true }),
-    ...sessionRows(el, m, compact ? 6 : 14, 12, titleWidth),
+    ...sessionRows(el, m, sessionCount, 12, titleWidth),
     m.histError ? t(el, m.histError, { color: C.warn }) : null,
-  ], { borderStyle: 'round', borderColor: C.border, paddingX: 1, flexShrink: 1 })
+  ], { borderStyle: 'single', borderColor: C.border, paddingX: 1, flexShrink: 1 })
 }
 
 // ---------------------------------------------------------------- sites
 
-export function band(el, m, h, columns) {
+// Narrow terminals: the three trackers as one line each inside a single box (5 rows).
+function compactBoxes(el, m, h, columns) {
+  const c = m.ctx
+  const s = cacheStatus(m.cache, m.now)
+  const ttlMs = m.cache ? m.cache.ttlMs : m.ttlMs
+  const turn = m.turn && m.turn.requests ? m.turn : null
+  const barCells = Math.max(10, Math.min(30, columns - 50))
+  return col(el, [
+    row(el, [
+      t(el, 'Today ', { color: C.muted }), t(el, fmt.usd(m.todayCost), { bold: true }),
+      t(el, ` · ${fmt.tokens(m.todayTokens)} tok · total ${fmt.usd(m.totalCost)}`, { color: C.muted }),
+      el.Box({ flexGrow: 1 }),
+      el.Button({ key: 'toggle', label: m.expanded ? '▼ Hide' : '▲ Breakdown', plain: true, onPress: h.toggle }),
+    ]),
+    c
+      ? row(el, [
+        t(el, 'Context ', { color: C.muted }), t(el, fmt.tokens(c.used), { bold: true }), t(el, '/' + fmt.tokens(c.window) + ' ', { color: C.muted }),
+        segments(el, contextBarCells(c.used, c.window, c.soft, barCells), 'ctxbar'),
+        t(el, ' ' + (c.used <= c.soft ? `${fmt.tokens(c.soft - c.used)} to ${fmt.tokens(c.soft)}` : `${fmt.tokens(c.used - c.soft)} past ${fmt.tokens(c.soft)}`), { color: c.used <= c.soft ? C.muted : C.over }),
+      ])
+      : t(el, 'Context waiting for the first response…', { color: C.muted }),
+    row(el, [
+      t(el, `Cache ${ttlMs >= 3_600_000 ? '1h' : '5m'} `, { color: C.muted }), t(el, s.label, { color: s.color }),
+      t(el, m.cache && m.cache.lastTs ? ` ${fmt.duration(s.remaining)} left · start ${fmt.clock(m.cache.warmSince || m.cache.lastTs)} · ends ${fmt.clock(m.cache.lastTs + m.cache.ttlMs)}` : '', { color: C.muted }),
+      t(el, turn ? ` · ${turn.running ? 'turn' : 'last turn'} ${fmt.tokens(turn.tokens)} tok ${fmt.usd(turn.cost)}` : ''),
+    ]),
+  ], { borderStyle: 'single', borderColor: C.border, paddingX: 1 })
+}
+
+// The boxes take 5 rows; the breakdown gets what maxRows leaves, so the boxes never scroll
+// out of view.
+const MIN_BREAKDOWN_ROWS = 9
+
+export function band(el, m, h, columns, maxRows = 40) {
   const wide = columns >= 110
   const boxes = wide
     ? row(el, [
-      usageBox(el, m, h, '28%'),
-      contextBox(el, m, '38%', Math.max(12, Math.floor(columns * 0.38) - 6)),
+      usageBox(el, m, h, '31%'),
+      contextBox(el, m, '35%', Math.max(12, Math.floor(columns * 0.35) - 6)),
       cacheBox(el, m, '34%'),
     ])
-    : col(el, [usageBox(el, m, h), contextBox(el, m, undefined, Math.max(12, columns - 8)), cacheBox(el, m)])
-  return col(el, [m.expanded ? breakdown(el, m, h, { columns, compact: true }) : null, boxes])
+    : compactBoxes(el, m, h, columns)
+  const spare = maxRows - 5
+  const top = !m.expanded ? null
+    : spare >= MIN_BREAKDOWN_ROWS ? breakdown(el, m, h, { columns, compact: true, rows: spare })
+    : t(el, 'Not enough room for the breakdown here: run /usage-hud pane', { color: C.warn })
+  return col(el, [top, boxes])
 }
 
 export function pane(el, m, h, columns) {

@@ -74,7 +74,7 @@ test('terminal band draws text meters with the soft-limit arrow', () => {
   const tree = band(EL, model('terminal'), H, 140)
   const all = texts(tree).join('\n')
   assert.ok(!types(tree).has('Svg'))
-  assert.match(all, /▶/)                     // soft-limit marker in the bar
+  assert.match(all, /►/)                     // soft-limit marker in the bar
   assert.match(all, /past 240K/)
   assert.match(all, /Cache 1h/)
   assert.match(all, /Sessions on/)
@@ -100,4 +100,20 @@ test('no undefined props reach an element', () => {
   const walk = (n) => { if (!n || typeof n !== 'object') return; for (const [k, v] of Object.entries(n.props || {})) if (v === undefined) bad.push(n.type + '.' + k); for (const c of n.props.children || []) walk(c) }
   walk(band(EL, model('terminal'), H, 140)); walk(band(EL, model('desktop', { ctx: null, cache: null, turn: null }), H, 140))
   assert.deepEqual(bad, [])
+})
+
+test('the expanded band fits maxRows so the boxes stay visible', () => {
+  // Rough row count of a tree: Box columns stack children, rows take the tallest child, borders add 2.
+  const height = (n) => {
+    if (!n || typeof n !== 'object') return 0
+    if (n.type !== 'Box') return n.type === 'Svg' ? 4 : 1
+    const kids = (n.props.children || []).map(height)
+    const inner = n.props.flexDirection === 'row' ? Math.max(0, ...kids) : kids.reduce((a, b) => a + b, 0)
+    return inner + (n.props.borderStyle ? 2 : 0)
+  }
+  for (const cols of [80, 150]) for (const rows of [12, 16, 22, 30]) {
+    const tree = band(EL, model('terminal'), H, cols, rows)
+    assert.ok(height(tree) <= rows, `cols=${cols} rows=${rows} drew ${height(tree)}`)
+  }
+  assert.match(texts(band(EL, model('terminal'), H, 150, 10)).join('\n'), /usage-hud pane/)
 })

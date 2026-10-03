@@ -3,16 +3,16 @@
 A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that draws a three-box HUD in the band directly above the prompt. It works in the Claude Code CLI and in the Code tab of Claude Desktop.
 
 ```
-╭ Today · all sessions  ▴ Breakdown ╮╭ Context 251K / 1.00M · 25% ──────────╮╭ Cache 1h ● warm  52:10 left ────────────╮
+┌ Today · all sessions  ▲ Breakdown ┐┌ Context 251K / 1.00M · 25% ──────────┐┌ Cache 1h ● warm  52:10 left ────────────┐
 │ $6.72  13.3M tok                  ││ ███████▶██░░░░░░░░░░░░░░░░░░░░░░░    ││ start 09:42 · last 10:48 · ends 11:48  │
 │ ·····▂▁▃█  14d · all time $7.65   ││ 749K left · 11K past 240K            ││ Last turn 937K tok · $0.571 · 6 req    │
-╰───────────────────────────────────╯╰──────────────────────────────────────╯╰────────────────────────────────────────╯
+└───────────────────────────────────┘└──────────────────────────────────────┘└────────────────────────────────────────┘
 ```
 
 | Box | What it shows |
 | :- | :- |
-| **Usage** (left) | Tokens and API-equivalent cost **today across every local session**, a 14-day sparkline, and the all-time total. **▴ Breakdown** expands a daily chart (cost or tokens, 30 days) above the band, with **per-session distribution** for the selected day (◀ ▶ to page through days, subagent spend called out). |
-| **Context** (middle) | The current conversation's context use against the model's window. The bar is **green up to a 240K soft limit** (marked by a **▶** arrow); anything past it is shaded **gray** as "not optimal". Shows tokens left and distance to/past the soft limit. |
+| **Usage** (left) | Tokens and API-equivalent cost **today across every local session**, a 14-day sparkline, and the all-time total. **▲ Breakdown** expands a daily chart (cost or tokens, 30 days) above the band, with **per-session distribution** for the selected day (◄ ► to page through days, subagent spend called out). |
+| **Context** (middle) | The current conversation's context use against the model's window. The bar is **green up to a 240K soft limit** (marked by a **►** arrow); anything past it is shaded **gray** as "not optimal". Shows tokens left and distance to/past the soft limit. |
 | **Cache** (right) | Prompt-cache TTL in use (1h or 5m, as the API actually wrote it), when the current **warm streak started**, the last cache hit, **time remaining** before the cache goes cold (live countdown, amber when close, red when expired), and the **last turn's tokens and cost** (subagents included). |
 
 In Desktop the meter and the daily chart are drawn as SVG (hover the bars for exact numbers); in the terminal they're drawn with block characters.
@@ -76,7 +76,7 @@ cd plugins/usage-hud && claude plugin test         # engine tests (render, turn.
 node --test plugins/usage-hud/tests/node/lib.test.mjs   # engine-free tests (ledger, pricing, view)
 ```
 
-Tested with Claude Code 2.1.288 on Windows 11.
+Tested live in the Claude Code 2.1.288 CLI on Windows 10 (engine tests, `claude plugin validate`, and an interactive session). In the legacy Windows console (conhost) 24-bit colors fall back to plain text; Windows Terminal shows them.
 
 ## License
 

@@ -136,6 +136,9 @@ function viewModel(surface) {
     sessionsByDay: (hist && hist.sessionsByDay) || {},
     histError: histError || (!hist ? 'Reading history…' : null),
     ctx: used > 0 ? { used, window, soft } : null,
+    ctxWindow: window,
+    softLimit: soft,
+    ttlMs: ttlMs(),
     cache: lastTs ? { lastTs, warmSince, ttlMs: ttlMs(), active: !!(turn && turn.running) } : null,
     turn: lastTurn,
   }
@@ -246,7 +249,7 @@ export function register(on, opts) {
       nextDay: () => { shiftDay(1); $.ui.invalidate('ui.render') },
       today: () => { ui.day = null; $.ui.invalidate('ui.render') },
     }
-    const mine = band(el, viewModel(e.surface), h, e.props.bodyColumns || 120)
+    const mine = band(el, viewModel(e.surface), h, e.props.bodyColumns || 120, e.props.maxRows || 40)
     // Keep whatever other mods draw in the band, under ours.
     const theirs = await next(e)
     return theirs ? el.Box({ flexDirection: 'column', children: [mine, theirs] }) : mine
