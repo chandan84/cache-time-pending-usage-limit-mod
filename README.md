@@ -4,7 +4,7 @@ A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that 
 
 ```
 ┌ Today · all sessions  ▲ Breakdown ┐┌ Context 251K / 1.00M · 25% ──────────┐┌ Cache 1h ● warm  52:10 left ────────────┐
-│ $6.72  13.3M tok                  ││ ███████▶██░░░░░░░░░░░░░░░░░░░░░░░    ││ start 09:42 · last 10:48 · ends 11:48  │
+│ $6.72  13.3M tok                  ││ ███████►██░░░░░░░░░░░░░░░░░░░░░░░    ││ start 09:42 · last 10:48 · ends 11:48  │
 │ ·····▂▁▃█  14d · all time $7.65   ││ 749K left · 11K past 240K            ││ Last turn 937K tok · $0.571 · 6 req    │
 └───────────────────────────────────┘└──────────────────────────────────────┘└────────────────────────────────────────┘
 ```
