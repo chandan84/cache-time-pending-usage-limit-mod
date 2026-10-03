@@ -3,3 +3,4 @@ plugins/*/.claude-plugin/types/
 plugins/*/tsconfig.json
 node_modules/
 *.tmp
+preview.html

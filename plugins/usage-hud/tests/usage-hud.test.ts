@@ -73,12 +73,13 @@ test('the band draws all three boxes on both surfaces', async ($, on) => {
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount(BAND(surface))
-    expect(await ui.find({ type: 'Text', text: 'Today · all sessions' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'TODAY · ALL SESSIONS' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^251K$/ })).toBeDefined()        // context used
     expect(await ui.find({ type: 'Text', text: /past 240K/ })).toBeDefined()      // over the soft limit
-    expect(await ui.find({ type: 'Text', text: /^Cache 1h $/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^start \d\d:\d\d · last/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'Last turn ' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: ' 1H TTL ' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^started \d\d:\d\d · last hit/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'LAST TURN ' })).toBeDefined()
+    if (surface === 'desktop') expect(await ui.find({ type: 'Svg' })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -87,9 +88,9 @@ test('the breakdown expands above the boxes and pages through days', async ($, o
   const saved = stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: SID })))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
   const ui = await $.ui.mount(BAND('terminal'))
-  expect(await ui.find({ type: 'Text', text: /^Sessions on/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^SESSIONS · / })).toBeUndefined()
   await ui.press({ key: 'toggle' })
-  expect(await ui.find({ type: 'Text', text: /^Sessions on/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^SESSIONS · / })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Build the HUD/ })).toBeDefined()
   expect(saved.get('ui')).toEqual({ expanded: true, metric: 'cost' })
   await ui.press({ key: 'prev' })
@@ -116,8 +117,8 @@ test('turn.step updates context, cache and the running turn live', async ($, on)
 
   const ui = await $.ui.mount(BAND('terminal'))
   expect(await ui.find({ type: 'Text', text: /^403K$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'This turn ' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '● refreshing' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'THIS TURN ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ' ● LIVE ' })).toBeDefined()
 })
 
 test('/usage-hud report prints a text summary', async ($, on) => {

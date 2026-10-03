@@ -76,8 +76,8 @@ test('terminal band draws text meters with the soft-limit arrow', () => {
   assert.ok(!types(tree).has('Svg'))
   assert.match(all, /►/)                     // soft-limit marker in the bar
   assert.match(all, /past 240K/)
-  assert.match(all, /Cache 1h/)
-  assert.match(all, /Sessions on/)
+  assert.match(all, /1H TTL/)
+  assert.match(all, /SESSIONS · /)
 })
 
 test('desktop band uses SVG for the meter and the daily chart', () => {
@@ -85,7 +85,7 @@ test('desktop band uses SVG for the meter and the daily chart', () => {
   const svgs = []
   const walk = (n) => { if (n && n.type === 'Svg') svgs.push(n); for (const c of (n && n.props && n.props.children) || []) walk(c) }
   walk(tree)
-  assert.equal(svgs.length, 2)
+  assert.equal(svgs.length, 5) // sparkline, meter, cache ring, daily columns, session bars
   for (const s of svgs) { assert.ok(s.props.alt); assert.match(s.props.source, /^<svg/); assert.ok(s.props.source.length < 131072) }
 })
 
@@ -116,4 +116,12 @@ test('the expanded band fits maxRows so the boxes stay visible', () => {
     assert.ok(height(tree) <= rows, `cols=${cols} rows=${rows} drew ${height(tree)}`)
   }
   assert.match(texts(band(EL, model('terminal'), H, 150, 10)).join('\n'), /usage-hud pane/)
+})
+
+test('an expanded band draws before the first history scan lands', () => {
+  for (const surface of ['terminal', 'desktop']) {
+    const m = model(surface, { series: [], sessionsByDay: {}, histError: 'Reading history…', todayCost: 0, todayTokens: 0, totalCost: 0 })
+    assert.match(texts(band(EL, m, H, 150, 30)).join('\n'), /Reading history/)
+    assert.ok(pane(EL, m, H, 100))
+  }
 })
