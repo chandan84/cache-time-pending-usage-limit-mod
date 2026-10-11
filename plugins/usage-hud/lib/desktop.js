@@ -184,27 +184,26 @@ function cacheSvg(m, w) {
   }
   body += pill(w - 18, 28, s.word, s.color, { dot: true })
 
-  // Ring gauge: share of the TTL left. Smaller on narrow cards.
-  const r = w < 260 ? 18 : 22, cx = 18 + r + 3, cy = 70, circ = 2 * Math.PI * r
-  body += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#2b3039" stroke-width="5"/>` +
-    (has ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(circ * s.frac).toFixed(2)} ${circ.toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>` : '') +
-    text(cx, cy + 4, has ? `${Math.round(s.frac * 100)}%` : '–', { size: r < 22 ? 10 : 11, weight: 600, fill: P.hi, anchor: 'middle' })
-  const tx = cx + r + 14, room = w - 18 - tx
+  // The ticking countdown and drain meter are native elements in the strip above the cards
+  // (see liveStrip), which the host updates in place. The image holds only what changes with
+  // a request or a status change, so it stays still while the seconds run.
+  const fx = 18
+  const froom = w - 18 - fx
   if (has) {
-    const ends = fmt.clock(c.lastTs + c.ttlMs), from = fmt.clock(c.warmSince || c.lastTs), hit = fmt.clock(c.lastTs)
-    const cd = [{ s: countdown(s.remaining), size: 24, weight: 600, fill: P.hi }, { s: 'left', dx: 6, size: 12, fill: P.mid }]
-    const right = fit([`ends ${ends}`, ends], room - runsW(cd) - 12, (t) => textW(t, 12))
-    body += runs(tx, 64, cd) + (right ? text(w - 18, 64, right, { size: 12, fill: P.mid, anchor: 'end' }) : '')
-    const sub = fit([`Started ${from} · last hit ${hit}`, `Since ${from} · hit ${hit}`, right ? `Since ${from}` : `Ends ${ends}`], room, (t) => textW(t, 11))
-    if (sub) body += text(tx, 85, sub, { size: 11, fill: P.low })
+    const at = c.lastTs + c.ttlMs
+    const zone = fmt.zone(at)
+    const big = [{ s: fmt.clock(at), size: 26, weight: 600, fill: s.remaining > 0 ? P.hi : P.mid }, ...(zone ? [{ s: zone, dx: 6, size: 13, weight: 600, fill: P.mid }] : [])]
+    const lead = s.remaining > 0 ? 'EXPIRES' : 'EXPIRED'
+    const from = fmt.clock(c.warmSince || c.lastTs), hit = fmt.clock(c.lastTs)
+    body += label(fx, 52, lead) + runs(fx + labelW(lead) + 10, 54, big)
+    const sub = fit([`Started ${from} · last hit ${hit}`, `Since ${from} · hit ${hit}`, `Since ${from}`], froom, (t) => textW(t, 11))
+    if (sub) body += text(fx, 78, sub, { size: 11, fill: P.low })
   } else {
-    body += text(tx, 66, fit(['Starts with the first response', 'Starts on reply', 'Idle'], room, (t) => textW(t, 13)) || '', { size: 13, fill: P.mid })
+    body += text(fx, 60, fit(['Starts with the first response', 'Starts on reply', 'Idle'], froom, (t) => textW(t, 13)) || '', { size: 13, fill: P.mid })
   }
 
   // Footer: the turn's tokens and cost, then the request count if there is room. Under the
   // figures on a wide card; from the left edge on a narrow one.
-  const fx = r < 22 ? 18 : tx
-  const froom = w - 18 - fx
   const lab = (long) => ({ ...LABEL, s: long ? (turn && turn.running ? 'THIS TURN' : 'LAST TURN') : 'TURN' })
   if (turn) {
     const tok = fmt.tokens(turn.tokens), usd = fmt.usd(turn.cost)
@@ -366,19 +365,48 @@ function cards(el, m, columns) {
   const svg = (source, alt) => el.Svg({ source, alt })
   const usage = svg(usageSvg(m, w1), `Today across all sessions: ${fmt.usd(m.todayCost)}, ${fmt.tokens(m.todayTokens)} tokens`)
   const ctx = svg(contextSvg(m, w2), c ? `Context ${fmt.tokens(c.used)} of ${fmt.tokens(c.window)}, soft limit ${fmt.tokens(c.soft)}` : 'Context: waiting for the first response')
-  const cache = svg(cacheSvg(m, w3), m.cache ? `Prompt cache ${s.word}, ${countdown(s.remaining)} left` : 'Prompt cache idle')
+  const cache = svg(cacheSvg(m, w3), m.cache ? `Prompt cache ${s.word}, expires ${fmt.clockZ(m.cache.lastTs + m.cache.ttlMs)}` : 'Prompt cache idle')
   return [usage, ctx, cache]
 }
 
+// The live part of the cache card: native Text the host diffs in place, so the seconds can
+// tick every redraw without repainting any image. A block-character drain meter stands in for
+// the old ring.
+const METER_CELLS = 14
+function liveStrip(el, m) {
+  const c = m.cache
+  const s = cacheStatus(c, m.now)
+  if (!c || !c.lastTs) return el.Text({ color: P.low, children: ['cache starts with the first response'] })
+  if (s.remaining <= 0) return el.Text({ color: P.coral, bold: true, children: ['cache expired · next prompt re-reads context'] })
+  const on = Math.max(1, Math.round(s.frac * METER_CELLS))
+  return el.Text({
+    wrap: 'truncate',
+    children: [
+      el.Text({ color: P.hi, bold: true, children: [countdown(s.remaining, m.tickSeconds === false)] }),
+      el.Text({ color: P.mid, children: [' left  '] }),
+      el.Text({ color: s.color, children: ['▰'.repeat(on)] }),
+      el.Text({ color: P.track, children: ['▱'.repeat(METER_CELLS - on)] }),
+    ],
+  })
+}
+
+// The cache guard's switch: its state is the label, so it reads as an indicator too.
+export function guardButton(el, m, h) {
+  return el.Button({ key: 'guard', label: m.guard ? 'Cache guard  ● ON' : 'Cache guard  ○ OFF', plain: true, onPress: h.guard })
+}
+
 // The band holds the three cards only. Desktop gives the band little height, so the breakdown
-// opens on demand in its own pane rather than pushing the cards out of view.
+// opens on demand in its own pane rather than pushing the cards out of view. A slim strip above
+// the cards lines the controls up with them: the breakdown button over the usage card, the
+// cache guard under the context card's column, and the live countdown over the cache card.
 export function desktopBand(el, m, h, columns) {
   const [usage, ctx, cache] = cards(el, m, columns)
   return col(el, [
     row(el, [
-      el.Box({ flexGrow: 1 }),
-      el.Button({ key: 'toggle', label: m.paneOpen ? 'Hide breakdown  ‹' : 'Breakdown  ›', plain: true, onPress: h.toggle }),
-    ]),
+      el.Box({ width: '30%', children: [el.Button({ key: 'toggle', label: m.paneOpen ? 'Hide breakdown  ‹' : 'Breakdown  ›', plain: true, onPress: h.toggle })] }),
+      el.Box({ width: '36%', flexDirection: 'row', children: [el.Box({ flexGrow: 1 }), guardButton(el, m, h)] }),
+      el.Box({ width: '34%', paddingLeft: 2, alignItems: 'center', children: [liveStrip(el, m)] }),
+    ], { columnGap: 1 }),
     row(el, [
       el.Box({ width: '30%', children: [usage] }),
       el.Box({ width: '36%', children: [ctx] }),

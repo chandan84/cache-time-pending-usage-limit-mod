@@ -173,3 +173,67 @@ test('a missing node shows a hint instead of failing', async ($, on) => {
   const ui = await $.ui.mount(BAND('terminal'))
   expect(await ui.find({ type: 'Text', text: /History/ })).toBeDefined()
 })
+
+// A session whose last request was three hours ago, so its 1h cache is long cold.
+function coldSnapshot() {
+  const l = new Ledger({ pricer: createPricer(), defaultTtlMs: HOUR })
+  l.ingest(JSON.stringify({ type: 'user', sessionId: SID, timestamp: iso(3 * HOUR), cwd: '/work/hud', message: { role: 'user', content: 'hi' } }), '/p/x.jsonl')
+  l.ingest(JSON.stringify({ type: 'assistant', sessionId: SID, timestamp: iso(3 * HOUR), requestId: 'c1', message: { id: 'c1', model: 'claude-opus-5-5', usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 80_000, cache_creation: { ephemeral_1h_input_tokens: 80_000, ephemeral_5m_input_tokens: 0 } } } }), '/p/x.jsonl')
+  return JSON.stringify(l.snapshot({ now: NOW, sessionId: SID }))
+}
+
+const PROMPT = { text: 'carry on', wait: false, origin: { kind: 'composer' } } as const
+
+test('after the cache expires, the next prompt asks first; Cancel drops it and keeps the text', async ($, on) => {
+  stubSession(on, coldSnapshot())
+  const asked: string[] = []
+  on('tool.call', { tool: 'AskUserQuestion' }, ($: any, e: any) => {
+    asked.push(e.questions[0].question)
+    return { result: { questions: e.questions, answers: { [e.questions[0].question]: 'Cancel' } } } as any
+  })
+  on('prompt.submit', ($: any, e: any) => ({ text: e.text }))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  const r: any = await $.prompt.submit(PROMPT as any)
+  expect(asked.length).toBe(1)
+  expect(asked[0]).toMatch(/cache expired/)
+  expect(r.drop).toMatch(/carry on/)
+})
+
+test('with the guard off, an expired cache sends the prompt without asking', async ($, on) => {
+  stubSession(on, coldSnapshot())
+  let asked = 0
+  on('tool.call', { tool: 'AskUserQuestion' }, () => { asked++; return { result: {} } as any })
+  on('prompt.submit', ($: any, e: any) => ({ text: e.text }))
+  on('command.run', () => ({ text: '' }))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  const ui = await $.ui.mount(BAND('terminal'))
+  await ui.press({ key: 'guard' })
+  const r: any = await $.prompt.submit(PROMPT as any)
+  expect(asked).toBe(0)
+  expect(r.text).toBe('carry on')
+})
+
+test('a warm cache never asks', async ($, on) => {
+  stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: SID })))
+  let asked = 0
+  on('tool.call', { tool: 'AskUserQuestion' }, () => { asked++; return { result: {} } as any })
+  on('prompt.submit', ($: any, e: any) => ({ text: e.text }))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  await $.prompt.submit(PROMPT as any)
+  expect(asked).toBe(0)
+})
+
+test('Continue sends the prompt on; "Continue and turn guard off" also switches the guard off', async ($, on) => {
+  stubSession(on, coldSnapshot())
+  let answer = 'Continue'
+  let asked = 0
+  on('tool.call', { tool: 'AskUserQuestion' }, ($: any, e: any) => { asked++; return { result: { questions: e.questions, answers: { [e.questions[0].question]: answer } } } as any })
+  on('prompt.submit', ($: any, e: any) => ({ text: e.text }))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  expect(((await $.prompt.submit(PROMPT as any)) as any).text).toBe('carry on')
+  answer = 'Continue and turn guard off'
+  expect(((await $.prompt.submit(PROMPT as any)) as any).text).toBe('carry on')
+  expect(asked).toBe(2)
+  await $.prompt.submit(PROMPT as any)
+  expect(asked).toBe(2) // guard is off now
+})

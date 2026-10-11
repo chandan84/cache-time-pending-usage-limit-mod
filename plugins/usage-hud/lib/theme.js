@@ -24,12 +24,12 @@ export const P = {
   slate: '#6b707c',
 }
 
-// The countdown shows whole minutes until the last two, then m:ss. Together with tickKey()
-// this keeps the band from redrawing every second: on Desktop each redraw repaints the
-// band's SVGs, which read as flicker.
-export function countdown(ms) {
+// A live m:ss (h:mm:ss from an hour) countdown. On Desktop the seconds live in a native Text
+// that the host diffs in place, while the card images stay still, so a per-second redraw
+// doesn't flicker. `coarse` (the live_seconds option off) shows whole minutes until the last two.
+export function countdown(ms, coarse = false) {
   if (ms <= 0) return '0:00'
-  return ms >= 120_000 ? `${Math.ceil(ms / 60_000)}m` : fmt.duration(ms)
+  return coarse && ms >= 120_000 ? `${Math.ceil(ms / 60_000)}m` : fmt.duration(ms)
 }
 
 // Counts down from the last request: each request (mid-turn too) re-warms the cache.
@@ -44,8 +44,9 @@ export function cacheStatus(cache, now) {
 }
 
 // Everything time-dependent the band shows. The hooks module redraws on a timer only when
-// this string changes.
+// this string changes: every second while the cache counts down, once a minute with
+// `tickSeconds: false`, and not at all once it is cold or idle.
 export function tickKey(m) {
   const s = cacheStatus(m.cache, m.now)
-  return `${s.label}|${countdown(s.remaining)}|${s.frac}`
+  return `${s.label}|${countdown(s.remaining, m.tickSeconds === false)}|${s.frac}`
 }

@@ -11,6 +11,7 @@
 
 import { createPricer, normalizeUsage, totalTokens, contextTokens } from '../lib/pricing.js'
 import { localDay } from '../lib/format.js'
+import * as fmt from '../lib/format.js'
 import { band, pane, textSummary, tickKey, BREAKDOWN_MIN_BAND_ROWS } from '../lib/view.js'
 
 const PANE = 'usage-hud'
@@ -20,7 +21,7 @@ const SCAN_EVERY_MS = 30_000
 
 const pricer = createPricer()
 
-let options = { context_soft_limit: 240_000, history_days: 30 }
+let options = { context_soft_limit: 240_000, history_days: 30, live_seconds: true, cache_guard: true }
 let sessionId = null
 let ttlSetting = null       // TTL the settings ask for: HOUR | FIVE_MIN | null
 let ctxWindow = null        // from $.session.usage()
@@ -36,6 +37,7 @@ let bandRows = 40           // the band's maxRows at its last draw, and its surf
 let bandSurface = 'terminal'
 let paneOpen = false        // the breakdown pane is showing
 let softOverride = null     // `/usage-hud limit`, saved in the store; wins over the plugin setting
+let guard = true            // ask before the first prompt after the cache expires; the HUD's switch, saved in the store
 
 // ------------------------------------------------------------------ data
 
@@ -130,6 +132,8 @@ function viewModel(surface) {
   return {
     surface,
     now,
+    guard,
+    tickSeconds: options.live_seconds !== false,
     expanded: ui.expanded,
     paneOpen,
     metric: ui.metric,
@@ -191,6 +195,29 @@ async function saveMetric($) {
   await $.store.set('ui', { metric: ui.metric })
 }
 
+// ------------------------------------------------------------------ cache guard
+
+// The cache is cold when the last request is older than the TTL. Null when there is nothing
+// to lose: no request yet, or an empty context.
+function coldCache() {
+  const hs = hist && hist.session && hist.session.id === sessionId ? hist.session : null
+  const lastTs = (live && live.lastRequestTs) || (hs && hs.lastRequestTs) || 0
+  const used = (live && live.contextTokens) || (hs && hs.contextTokens) || 0
+  if (!lastTs || !used) return null
+  const ago = Date.now() - (lastTs + ttlMs())
+  if (ago <= 0) return null
+  const model = (live && live.model) || (hs && hs.model) || null
+  const rewrite = pricer.cost(model, { input: 0, output: 0, cacheRead: 0, cacheWrite5m: ttlMs() === HOUR ? 0 : used, cacheWrite1h: ttlMs() === HOUR ? used : 0 })
+  const warm = pricer.cost(model, { input: 0, output: 0, cacheRead: used, cacheWrite5m: 0, cacheWrite1h: 0 })
+  return { ago, used, rewrite, warm }
+}
+
+async function setGuard($, on) {
+  guard = on
+  await $.store.set('guard', on)
+  $.ui.invalidate('ui.render')
+}
+
 // ------------------------------------------------------------------ hooks
 
 export function register(on, opts) {
@@ -199,8 +226,8 @@ export function register(on, opts) {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'usage-hud',
-      description: 'Usage HUD: toggle the daily/session breakdown, or `pane`, `report`, `refresh`, `limit 300k` (context soft limit)',
-      argumentHint: '[pane|report|refresh|limit <tokens>|limit reset]',
+      description: 'Usage HUD: toggle the daily/session breakdown, or `pane`, `report`, `refresh`, `guard on|off` (ask after the cache expires), `limit 300k` (context soft limit)',
+      argumentHint: '[pane|report|refresh|guard [on|off]|limit <tokens>|limit reset]',
       immediate: true,
     })
     const saved = await $.store.get('ui')
@@ -208,6 +235,8 @@ export function register(on, opts) {
     if (saved && (saved.metric === 'tokens' || saved.metric === 'cost')) ui.metric = saved.metric
     const limit = await $.store.get('softLimit')
     softOverride = typeof limit === 'number' && limit > 0 ? limit : null
+    const savedGuard = await $.store.get('guard')
+    guard = typeof savedGuard === 'boolean' ? savedGuard : options.cache_guard !== false
     await loadSessionFacts($)
     await runScan($)
     // The countdown changes once a minute (every second in its last two), so check each second
@@ -264,6 +293,32 @@ export function register(on, opts) {
     return next(e)
   })
 
+  // The cache guard: the first prompt after the prompt cache expires re-reads the whole context
+  // at the uncached rate, so ask before sending it on in the same session.
+  on('prompt.submit', async ($, e, next) => {
+    const kind = e.origin && e.origin.kind
+    if (!guard || (kind && kind !== 'composer' && kind !== 'bridge') || e.turnId || /^\s*\//.test(e.text)) return next(e)
+    const cold = coldCache()
+    if (!cold) return next(e)
+    const mins = Math.max(1, Math.round(cold.ago / 60_000))
+    let answer
+    try {
+      answer = await $.ui.ask(
+        `The prompt cache expired ${mins} min ago. Sending this re-reads ${fmt.tokens(cold.used)} tokens of context at the uncached rate: about ${fmt.usd(cold.rewrite)}, against ${fmt.usd(cold.warm)} while the cache was warm. Continue in this session?`,
+        { header: 'Cache guard', options: ['Continue', 'Continue and turn guard off', 'Cancel'] },
+      )
+    } catch {
+      answer = 'Cancel'
+    }
+    if (answer === 'Continue' || answer === 'Continue and turn guard off') {
+      if (answer !== 'Continue') await setGuard($, false)
+      return next(e)
+    }
+    return { drop: `Not sent: the prompt cache expired. Send again to continue.
+
+${fmt.truncate(e.text, 300)}` }
+  })
+
   on('command.run', { command: 'usage-hud' }, async ($, e) => {
     const arg = String(e.args || '').trim().toLowerCase()
     if (arg === 'pane') {
@@ -284,6 +339,11 @@ export function register(on, opts) {
       }
       $.ui.invalidate('ui.render')
       return { text: `Context soft limit: ${softLimit().toLocaleString('en-US')} tokens${softOverride ? '' : ' (plugin setting)'}.` }
+    }
+    if (arg === 'guard' || arg.startsWith('guard ')) {
+      const v = arg.slice(5).trim()
+      await setGuard($, v === 'on' ? true : v === 'off' ? false : !guard)
+      return { text: guard ? 'Cache guard on: I will ask before the first prompt after the prompt cache expires.' : 'Cache guard off.' }
     }
     if (arg === 'refresh') {
       await runScan($)
@@ -311,6 +371,7 @@ export function register(on, opts) {
       prevDay: () => { shiftDay(-1); $.ui.invalidate('ui.render') },
       nextDay: () => { shiftDay(1); $.ui.invalidate('ui.render') },
       today: () => { ui.day = null; $.ui.invalidate('ui.render') },
+      guard: () => setGuard($, !guard),
     }
     bandRows = e.props.maxRows || 40
     bandSurface = e.surface
@@ -342,6 +403,7 @@ export function register(on, opts) {
       prevDay: () => { shiftDay(-1); $.ui.invalidate('ui.render') },
       nextDay: () => { shiftDay(1); $.ui.invalidate('ui.render') },
       today: () => { ui.day = null; $.ui.invalidate('ui.render') },
+      guard: () => setGuard($, !guard),
     }
     return pane(el, viewModel(e.surface), h, e.props.bodyColumns || 100)
   })

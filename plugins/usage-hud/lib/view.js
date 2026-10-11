@@ -129,7 +129,7 @@ function contextCard(el, m, width, inner) {
   ], { width, key: 'ctx' })
 }
 
-function cacheCard(el, m, width, inner) {
+function cacheCard(el, m, width, inner, h) {
   const c = m.cache
   const s = cacheStatus(c, m.now)
   const ttlMs = c ? c.ttlMs : m.ttlMs
@@ -137,13 +137,17 @@ function cacheCard(el, m, width, inner) {
   const turn = m.turn && m.turn.requests ? m.turn : null
   const has = !!(c && c.lastTs)
   const drain = has ? paint(el, meterCells([{ to: s.frac, color: s.color }], 1, Math.max(8, Math.floor(inner * 0.35)), P.track), 'drain') : null
-  const head = row(el, [label(el, 'PROMPT CACHE'), t(el, ' '), chip(el, ttl, P.mid, P.raised), spacer(el), chip(el, s.label, P.card, s.color)])
+  const head = row(el, [
+    label(el, inner >= 44 ? 'PROMPT CACHE' : 'CACHE'), t(el, ' '), chip(el, ttl, P.mid, P.raised), spacer(el),
+    h ? el.Button({ key: 'guard', label: m.guard ? 'GUARD ON' : 'GUARD OFF', plain: true, onPress: h.guard }) : null, t(el, ' '),
+    chip(el, s.label, P.card, s.color),
+  ])
   const timeRow = row(el, [
     t(el, has ? countdown(s.remaining) : '–', { bold: true, color: P.hi }),
     t(el, has ? ' left  ' : '', { color: P.mid }),
     drain,
     spacer(el),
-    t(el, has ? `ends ${fmt.clock(c.lastTs + c.ttlMs)}` : 'starts with the first response', { color: P.mid }),
+    t(el, has ? `ends ${fmt.clockZ(c.lastTs + c.ttlMs)}` : 'starts with the first response', { color: P.mid }),
   ])
   const startRow = t(el, has ? `started ${fmt.clock(c.warmSince || c.lastTs)} · last hit ${fmt.clock(c.lastTs)}` : ' ', { color: P.low })
   const turnRow = turn
@@ -278,7 +282,8 @@ function compactCard(el, m, h, columns) {
       : row(el, [label(el, 'CONTEXT '), t(el, 'waiting for the first response', { color: P.mid })]),
     row(el, [
       label(el, 'CACHE '), chip(el, ttlMs >= 3_600_000 ? '1H' : '5M', P.mid, P.raised), t(el, ' '), chip(el, s.label, P.card, s.color),
-      t(el, m.cache && m.cache.lastTs ? ` ${countdown(s.remaining)} left · ends ${fmt.clock(m.cache.lastTs + m.cache.ttlMs)}` : '', { color: P.mid }),
+      t(el, m.cache && m.cache.lastTs ? ` ${countdown(s.remaining)} left · ends ${fmt.clockZ(m.cache.lastTs + m.cache.ttlMs)} ` : '', { color: P.mid }),
+      el.Button({ key: 'guard', label: m.guard ? 'GUARD ON' : 'GUARD OFF', plain: true, onPress: h.guard }),
       spacer(el),
       t(el, turn ? `${turn.running ? 'turn' : 'last turn'} ${fmt.tokens(turn.tokens)} · ${fmt.usd(turn.cost)}` : '', { color: P.hi }),
     ]),
@@ -307,7 +312,7 @@ export function band(el, m, h, columns, maxRows = 40) {
     cards = row(el, [
       usageCard(el, m, h, w1, w1 - 4),
       contextCard(el, m, w2, w2 - 4),
-      cacheCard(el, m, w3, w3 - 4),
+      cacheCard(el, m, w3, w3 - 4, h),
     ], { columnGap: 1 })
   } else {
     cards = compactCard(el, m, h, columns)
@@ -324,7 +329,7 @@ export function pane(el, m, h, columns) {
   return col(el, [
     breakdown(el, m, h, { columns: w, compact: false }),
     contextCard(el, m, undefined, w - 4),
-    cacheCard(el, m, undefined, w - 4),
+    cacheCard(el, m, undefined, w - 4, h),
   ], { rowGap: 1 })
 }
 
@@ -335,7 +340,8 @@ export function textSummary(m) {
   if (m.ctx) lines.push(`Context: ${fmt.tokens(m.ctx.used)} / ${fmt.tokens(m.ctx.window)} (${fmt.tokens(Math.max(0, m.ctx.window - m.ctx.used))} left, soft limit ${fmt.tokens(m.ctx.soft)})`)
   if (m.cache && m.cache.lastTs) {
     const s = cacheStatus(m.cache, m.now)
-    lines.push(`Cache (${m.cache.ttlMs >= 3_600_000 ? '1h' : '5m'}): ${s.label.replace(/^[●○] /, '').toLowerCase()}, ${fmt.duration(s.remaining)} left · started ${fmt.clock(m.cache.warmSince || m.cache.lastTs)} · ends ${fmt.clock(m.cache.lastTs + m.cache.ttlMs)}`)
+    lines.push(`Cache (${m.cache.ttlMs >= 3_600_000 ? '1h' : '5m'}): ${s.label.replace(/^[●○] /, '').toLowerCase()}, ${fmt.duration(s.remaining)} left · started ${fmt.clock(m.cache.warmSince || m.cache.lastTs)} · ends ${fmt.clockZ(m.cache.lastTs + m.cache.ttlMs)}`)
+    lines.push(`Cache guard: ${m.guard ? 'on (asks before the first prompt after the cache expires)' : 'off'}`)
   }
   if (m.turn && m.turn.requests) lines.push(`Last turn: ${fmt.tokens(m.turn.tokens)} tokens · ${fmt.usd(m.turn.cost)} · ${m.turn.requests} requests`)
   const days = (m.series || []).filter((d) => d.requests).slice(-7)

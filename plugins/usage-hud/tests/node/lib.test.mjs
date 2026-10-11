@@ -68,7 +68,7 @@ function model(surface, extra = {}) {
     ...extra,
   }
 }
-const H = { toggle() {}, metric() {}, prevDay() {}, nextDay() {}, today() {} }
+const H = { toggle() {}, metric() {}, prevDay() {}, nextDay() {}, today() {}, guard() {} }
 
 test('terminal band draws text meters with the soft-limit arrow', () => {
   const tree = band(EL, model('terminal'), H, 140)
@@ -103,7 +103,7 @@ test('desktop draws each card whole as a rounded SVG; the band holds only the ca
     walkB(tree)
     return out
   }
-  assert.deepEqual(keys(tree), ['toggle'])
+  assert.deepEqual(keys(tree), ['toggle', 'guard'])
   const paneKeys = keys(pane(EL, model('desktop'), H, 110))
   for (const k of ['m-cost', 'm-tok', 'prev', 'next', 'today', 'close']) assert.ok(paneKeys.includes(k), k)
 })
@@ -150,17 +150,40 @@ test('an expanded band draws before the first history scan lands', () => {
   }
 })
 
-test('the band only needs a timer redraw when the countdown text changes', async () => {
+test('the countdown ticks every second; tickSeconds:false keeps it to minutes', async () => {
   const { tickKey, countdown } = await import('../../lib/view.js')
   const cache = { lastTs: NOW, warmSince: NOW, ttlMs: HOUR }
-  const key = (msLater) => tickKey({ cache, now: NOW + msLater })
-  // 50 minutes left: whole minutes, so 30 seconds later nothing changed
-  assert.equal(key(10 * 60_000), key(10 * 60_000 + 30_000))
-  assert.notEqual(key(10 * 60_000), key(11 * 60_000))
-  // last two minutes: seconds
+  const key = (msLater, extra = {}) => tickKey({ cache, now: NOW + msLater, ...extra })
   assert.equal(countdown(90_000), '1:30')
-  assert.equal(countdown(50 * 60_000), '50m')
-  assert.notEqual(key(HOUR - 90_000), key(HOUR - 89_000))
+  assert.equal(countdown(50 * 60_000), '50:00')
+  assert.equal(countdown(50 * 60_000, true), '50m')
+  assert.notEqual(key(10 * 60_000), key(10 * 60_000 + 1000))
+  assert.equal(key(10 * 60_000, { tickSeconds: false }), key(10 * 60_000 + 30_000, { tickSeconds: false }))
+  assert.notEqual(key(10 * 60_000, { tickSeconds: false }), key(11 * 60_000, { tickSeconds: false }))
+  // cold: nothing left to tick
+  assert.equal(key(HOUR + 1000), key(HOUR + 60_000))
+})
+
+test('times carry the local zone', async () => {
+  const { zone, clockZ, clock } = await import('../../lib/format.js')
+  assert.match(zone(NOW), /^(ET|CT|MT|PT|[A-Z]{2,5}|GMT[+-]\d+(:\d+)?|UTC)$/)
+  assert.equal(clockZ(NOW), `${clock(NOW)} ${zone(NOW)}`)
+  const z = new Date(NOW).toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop()
+  assert.ok(zone(NOW) === z || /^[EMCP]T$/.test(zone(NOW)))
+})
+
+test('the Desktop band shows the live countdown as text and keeps the images still', () => {
+  const walk = (n, f) => { if (n && n.type) f(n); for (const c of (n && n.props && n.props.children) || []) walk(c, f) }
+  const sources = (m) => { const out = []; walk(band(EL, m, H, 140), (n) => { if (n.type === 'Svg') out.push(n.props.source) }); return out.join('') }
+  const texts = (m) => { const out = []; walk(band(EL, m, H, 140), (n) => { if (n.type === 'Text' && typeof n.props.children[0] === 'string') out.push(n.props.children[0]) }); return out.join('') }
+  const a = model('desktop', { now: NOW }), b = model('desktop', { now: NOW + 1000 })
+  assert.equal(sources(a), sources(b)) // a second later: same SVG sources, no repaint
+  assert.notEqual(texts(a), texts(b)) // ...but the countdown text moved
+  assert.match(texts(a), /\d+:\d\d/)
+  assert.match(sources(a), /EXPIRES/)
+  assert.match(texts(model('desktop', { guard: true })), /./)
+  const labels = []; walk(band(EL, model('desktop', { guard: false }), H, 140), (n) => { if (n.type === 'Button') labels.push(n.props.label) })
+  assert.ok(labels.some((l) => /OFF/.test(l)))
 })
 
 test('no SVG is interactive (framed): frames flicker when the band redraws', () => {

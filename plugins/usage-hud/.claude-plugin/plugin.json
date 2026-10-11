@@ -1,12 +1,21 @@
 {
   "name": "usage-hud",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Three-box HUD above the prompt: tokens and API-equivalent cost across all sessions (daily and per-session breakdown), context-window meter with a soft limit, and prompt-cache warmth countdown with last-turn tokens and cost.",
-  "author": { "name": "Chandan Mishra" },
+  "author": {
+    "name": "Chandan Mishra"
+  },
   "homepage": "https://github.com/chandan84/cache-time-pending-usage-limit-mod",
   "repository": "https://github.com/chandan84/cache-time-pending-usage-limit-mod",
   "license": "MIT",
-  "keywords": ["mod", "usage", "cost", "tokens", "context", "prompt-cache"],
+  "keywords": [
+    "mod",
+    "usage",
+    "cost",
+    "tokens",
+    "context",
+    "prompt-cache"
+  ],
   "userConfig": {
     "context_soft_limit": {
       "type": "number",
@@ -19,6 +28,18 @@
       "title": "Days in the daily chart",
       "description": "How many days the breakdown chart shows. Default 30.",
       "default": 30
+    },
+    "live_seconds": {
+      "type": "boolean",
+      "title": "Tick the cache countdown every second",
+      "description": "Redraw the band each second while the cache counts down. Turn off to update once a minute if your Desktop build flickers.",
+      "default": true
+    },
+    "cache_guard": {
+      "type": "boolean",
+      "title": "Ask when the prompt cache has expired",
+      "description": "Before the first prompt after the cache expires, ask whether to continue in the same session. Also switchable from the HUD or with /usage-hud guard on|off.",
+      "default": true
     }
   }
 }

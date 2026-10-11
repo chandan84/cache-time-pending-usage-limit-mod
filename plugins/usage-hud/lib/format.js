@@ -31,6 +31,25 @@ export function clock(ts, withSeconds = false) {
   return withSeconds ? `${hm}:${String(d.getSeconds()).padStart(2, '0')}` : hm
 }
 
+// The viewer's own time zone as a short name: ET, CT, MT, PT for the US zones, otherwise what
+// Intl gives (UTC, GMT+1, IST). Empty when the runtime has no Intl.
+const US_ZONES = { EST: 'ET', EDT: 'ET', CST: 'CT', CDT: 'CT', MST: 'MT', MDT: 'MT', PST: 'PT', PDT: 'PT' }
+export function zone(ts) {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(new Date(ts)).find((p) => p.type === 'timeZoneName')
+    const name = part ? part.value : ''
+    return US_ZONES[name] || name
+  } catch {
+    return ''
+  }
+}
+
+// "18:20 ET": the local clock time with its zone.
+export function clockZ(ts, withSeconds = false) {
+  const z = zone(ts)
+  return clock(ts, withSeconds) + (z ? ' ' + z : '')
+}
+
 export function localDay(ts) {
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

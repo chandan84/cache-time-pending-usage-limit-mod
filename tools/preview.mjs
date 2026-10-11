@@ -19,7 +19,7 @@ const s = snap.session
 
 const now = Date.now()
 const model = (expanded, surface) => ({
-  surface, now, expanded, metric: 'cost', day: snap.today, currentSessionId: snap.latestSessionId,
+  surface, now, guard: true, expanded, metric: 'cost', day: snap.today, currentSessionId: snap.latestSessionId,
   todayCost: snap.todayAgg.cost, todayTokens: snap.todayAgg.tokens, totalCost: snap.total.cost,
   series: snap.series, sessionsByDay: snap.sessionsByDay, histError: null,
   ctx: s ? { used: s.contextTokens, window: s.contextWindow, soft: 240_000 } : null,
@@ -30,7 +30,7 @@ const model = (expanded, surface) => ({
 
 const mk = (type) => (props) => ({ type, props })
 const EL = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Svg: mk('Svg') }
-const H = { toggle() {}, metric() {}, prevDay() {}, nextDay() {}, today() {} }
+const H = { toggle() {}, metric() {}, prevDay() {}, nextDay() {}, today() {}, guard() {} }
 const COL = 7.2
 const escH = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
