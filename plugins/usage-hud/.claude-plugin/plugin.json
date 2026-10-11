@@ -1,6 +1,6 @@
 {
   "name": "usage-hud",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Three-box HUD above the prompt: tokens and API-equivalent cost across all sessions (daily and per-session breakdown), context-window meter with a soft limit, and prompt-cache warmth countdown with last-turn tokens and cost.",
   "author": {
     "name": "Chandan Mishra"
@@ -31,9 +31,9 @@
     },
     "live_seconds": {
       "type": "boolean",
-      "title": "Tick the cache countdown every second",
-      "description": "Redraw the band each second while the cache counts down. Turn off to update once a minute if your Desktop build flickers.",
-      "default": true
+      "title": "Redraw Desktop's band every second",
+      "description": "Desktop only. Off (default): the band changes once a minute and the exact m:ss ticks in the status line. On: redraw the band every second, which can flicker its buttons. Terminals always tick every second.",
+      "default": false
     },
     "cache_guard": {
       "type": "boolean",

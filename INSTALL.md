@@ -172,7 +172,7 @@ claude plugin install usage-hud@usage-hud-mods
 | :- | :- | :- |
 | `context_soft_limit` | `240000` | Where the context meter turns from teal to hatched gray, marked by the amber **▼** |
 | `history_days` | `30` | Days in the daily chart |
-| `live_seconds` | `true` | Tick the cache countdown every second. Turn off to redraw once a minute |
+| `live_seconds` | `false` | Desktop only. Redraw the band every second (can flicker its buttons). Off: the band changes once a minute and the exact m:ss ticks in the status line |
 | `cache_guard` | `true` | Ask before the first prompt after the prompt cache expires (starting state; the GUARD button and `/usage-hud guard` override it) |
 
 From a shell: `echo '{"context_soft_limit":"200000","history_days":"30"}' | claude plugin configure usage-hud@usage-hud-mods --values-stdin` (values are strings). Restart the session to apply.

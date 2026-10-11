@@ -12,7 +12,7 @@
 import { createPricer, normalizeUsage, totalTokens, contextTokens } from '../lib/pricing.js'
 import { localDay } from '../lib/format.js'
 import * as fmt from '../lib/format.js'
-import { band, pane, textSummary, tickKey, BREAKDOWN_MIN_BAND_ROWS } from '../lib/view.js'
+import { band, pane, textSummary, tickKey, cacheStatus, countdown, BREAKDOWN_MIN_BAND_ROWS } from '../lib/view.js'
 
 const PANE = 'usage-hud'
 const HOUR = 3_600_000
@@ -21,7 +21,7 @@ const SCAN_EVERY_MS = 30_000
 
 const pricer = createPricer()
 
-let options = { context_soft_limit: 240_000, history_days: 30, live_seconds: true, cache_guard: true }
+let options = { context_soft_limit: 240_000, history_days: 30, live_seconds: false, cache_guard: true }
 let sessionId = null
 let ttlSetting = null       // TTL the settings ask for: HOUR | FIVE_MIN | null
 let ctxWindow = null        // from $.session.usage()
@@ -33,6 +33,7 @@ let live = null             // this session, from turn.step: { model, contextTok
 let turn = null             // { tokens, cost, requests, startTs, running }
 const ui = { expanded: false, metric: 'cost', day: null }
 let lastTick = ''           // tickKey() at the last timer redraw
+let lastStatus = null       // the status-line text last set (Desktop's ticking seconds)
 let bandRows = 40           // the band's maxRows at its last draw, and its surface
 let bandSurface = 'terminal'
 let paneOpen = false        // the breakdown pane is showing
@@ -133,7 +134,9 @@ function viewModel(surface) {
     surface,
     now,
     guard,
-    tickSeconds: options.live_seconds !== false,
+    // The terminal redraws per second. Desktop's band redraws once a minute (each redraw flickers
+    // its buttons) and the exact seconds go to the status line, unless live_seconds asks for both.
+    tickSeconds: surface === 'terminal' || options.live_seconds === true,
     expanded: ui.expanded,
     paneOpen,
     metric: ui.metric,
@@ -212,6 +215,15 @@ function coldCache() {
   return { ago, used, rewrite, warm }
 }
 
+// "Cache 49:12 · ends 19:19 ET" while the cache is warm; cleared when it isn't.
+function setStatus($, m) {
+  const st = cacheStatus(m.cache, m.now)
+  const text = m.cache && st.remaining > 0 ? `Cache ${countdown(st.remaining)} · ends ${fmt.clockZ(m.cache.lastTs + m.cache.ttlMs)}` : undefined
+  if (text === lastStatus) return
+  lastStatus = text
+  $.ui.status(text)
+}
+
 async function setGuard($, on) {
   guard = on
   await $.store.set('guard', on)
@@ -239,11 +251,13 @@ export function register(on, opts) {
     guard = typeof savedGuard === 'boolean' ? savedGuard : options.cache_guard !== false
     await loadSessionFacts($)
     await runScan($)
-    // The countdown changes once a minute (every second in its last two), so check each second
-    // and redraw only when what the band shows has changed. Redrawing every second repaints
-    // the band's SVGs on Desktop, which flickers.
+    // Check each second and redraw only when what the band shows has changed: every second in
+    // a terminal, once a minute on Desktop. Desktop's exact m:ss ticks in the status line, which
+    // costs no band redraw.
     $.clock.every(1000, () => {
-      const key = tickKey(viewModel('terminal'))
+      const m = viewModel(bandSurface)
+      if (bandSurface !== 'terminal') setStatus($, m)
+      const key = tickKey(m)
       if (key === lastTick) return
       lastTick = key
       $.ui.invalidate('ui.render')
