@@ -23,7 +23,7 @@ function fixtureLedger() {
   return l
 }
 
-function stubSession(on: any, scanOut: string, run: any = () => ({ value: { exitCode: 0, stdout: scanOut, stderr: '' } })) {
+function stubSession(on: any, scanOut: string, run: any = () => ({ value: { exitCode: 0, stdout: scanOut, stderr: '' } }), settings: any = { promptCacheTtl: '1h' }) {
   mock.clock(on, { now: NOW })
   mock.env(on, {})
   const saved = new Map<string, unknown>()
@@ -31,7 +31,7 @@ function stubSession(on: any, scanOut: string, run: any = () => ({ value: { exit
   on('store.set', ($: any, e: any) => { saved.set(e.key, e.value); return { value: undefined } })
   on('command.register', () => ({ value: undefined }))
   on('session.id', () => ({ value: SID }))
-  on('settings.read', () => ({ value: { promptCacheTtl: '1h' } }))
+  on('settings.read', () => ({ value: settings }))
   on('session.usage', () => ({ value: { context: { window: 1_000_000 }, rateLimits: [] } }))
   on('session.surfaces', () => ({ value: ['terminal'] }))
   on('process.run', run)
@@ -236,4 +236,32 @@ test('Continue sends the prompt on; "Continue and turn guard off" also switches 
   expect(asked).toBe(2)
   await $.prompt.submit(PROMPT as any)
   expect(asked).toBe(2) // guard is off now
+})
+
+test('the TTL the API reports on a cache write beats the settings and an unmatched scan', async ($, on) => {
+  // The scan knows no session and the settings say 5m: only the live step says 1h.
+  stubSession(on, JSON.stringify(fixtureLedger().snapshot({ now: NOW, sessionId: 'someone-else' })), undefined, { promptCacheTtl: '5m' })
+  on('turn.start', ($: any, e: any) => ({ turnId: e.turnId }))
+  on('turn.step', async function* ($: any, e: any) {
+    return {
+      turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn',
+      usage: { input_tokens: 5, output_tokens: 10, cache_read_input_tokens: 100_000, cache_creation_input_tokens: 2000, cache_creation: { ephemeral_1h_input_tokens: 2000, ephemeral_5m_input_tokens: 0 }, model: 'claude-opus-5-5' },
+    }
+  })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  await $.turn.start({ turnId: 't1' })
+  const stream = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 3 })
+  let step = await stream.next()
+  while (step.done !== true) step = await stream.next()
+  const out = await $.command.run({ command: 'usage-hud', args: 'report' })
+  expect(out.text).toMatch(/TTL: 1h \(reported by the API/)
+  expect(out.text).toMatch(/Cache \(1h\)/)
+})
+
+test('/usage-hud guard test asks the question now and changes nothing', async ($, on) => {
+  stubSession(on, coldSnapshot())
+  on('tool.call', { tool: 'AskUserQuestion' }, ($: any, e: any) => ({ result: { questions: e.questions, answers: { [e.questions[0].question]: 'Cancel' } } } as any))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work/hud' })
+  const out = await $.command.run({ command: 'usage-hud', args: 'guard test' })
+  expect(out.text).toMatch(/Guard test: you chose "Cancel"/)
 })

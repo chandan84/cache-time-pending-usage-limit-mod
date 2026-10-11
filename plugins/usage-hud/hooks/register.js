@@ -24,6 +24,7 @@ const pricer = createPricer()
 let options = { context_soft_limit: 240_000, history_days: 30, live_seconds: false, cache_guard: true }
 let sessionId = null
 let ttlSetting = null       // TTL the settings ask for: HOUR | FIVE_MIN | null
+let liveTtl = null          // TTL the API reported on this session's latest cache write: HOUR | FIVE_MIN | null
 let ctxWindow = null        // from $.session.usage()
 let hist = null             // scanner snapshot (all sessions)
 let histError = null
@@ -46,7 +47,7 @@ async function runScan($) {
   if (scanning) return
   scanning = true
   try {
-    const argv = ['node', `${$.plugin.root}/scripts/scan.mjs`, '--days', String(options.history_days || 30), '--ttl', ttlSetting === HOUR ? '1h' : '5m']
+    const argv = ['node', `${$.plugin.root}/scripts/scan.mjs`, '--days', String(options.history_days || 30), '--ttl', ttlMs() === HOUR ? '1h' : '5m']
     if (sessionId) argv.push('--session', sessionId)
     const r = await $.process.run(argv, { timeoutMs: 120_000 })
     const data = JSON.parse(r.stdout || '{}')
@@ -83,12 +84,26 @@ async function refreshContext($) {
   } catch { /* not every host keeps a ledger */ }
 }
 
+// What the API itself last wrote wins, then the scanned transcript, then the settings, then 5m.
+function ttlInfo() {
+  const hs = hist && hist.session && hist.session.id === sessionId ? hist.session : null
+  if (liveTtl) return { ms: liveTtl, source: 'reported by the API on this session' }
+  if (hs && hs.ttlMs) return { ms: hs.ttlMs, source: 'read from the session transcript' }
+  if (ttlSetting) return { ms: ttlSetting, source: 'from promptCacheTtl' }
+  return { ms: FIVE_MIN, source: 'default (nothing reported yet)' }
+}
+
 function ttlMs() {
-  const s = hist && hist.session && hist.session.id === sessionId ? hist.session : null
-  return (s && s.ttlMs) || ttlSetting || FIVE_MIN
+  return ttlInfo().ms
 }
 
 function recordStep(e, usage) {
+  // The cache write says which TTL the API applied; a step with only reads says nothing.
+  const cc = usage.cache_creation || {}
+  if (!e.agentId) {
+    if (cc.ephemeral_1h_input_tokens > 0) liveTtl = HOUR
+    else if (cc.ephemeral_5m_input_tokens > 0) liveTtl = FIVE_MIN
+  }
   const u = normalizeUsage(usage, ttlMs() === HOUR ? '1h' : '5m')
   const model = usage.model || e.model
   const now = Date.now()
@@ -202,13 +217,13 @@ async function saveMetric($) {
 
 // The cache is cold when the last request is older than the TTL. Null when there is nothing
 // to lose: no request yet, or an empty context.
-function coldCache() {
+function coldCache(force = false) {
   const hs = hist && hist.session && hist.session.id === sessionId ? hist.session : null
   const lastTs = (live && live.lastRequestTs) || (hs && hs.lastRequestTs) || 0
   const used = (live && live.contextTokens) || (hs && hs.contextTokens) || 0
   if (!lastTs || !used) return null
   const ago = Date.now() - (lastTs + ttlMs())
-  if (ago <= 0) return null
+  if (ago <= 0 && !force) return null
   const model = (live && live.model) || (hs && hs.model) || null
   const rewrite = pricer.cost(model, { input: 0, output: 0, cacheRead: 0, cacheWrite5m: ttlMs() === HOUR ? 0 : used, cacheWrite1h: ttlMs() === HOUR ? used : 0 })
   const warm = pricer.cost(model, { input: 0, output: 0, cacheRead: used, cacheWrite5m: 0, cacheWrite1h: 0 })
@@ -222,6 +237,19 @@ function setStatus($, m) {
   if (text === lastStatus) return
   lastStatus = text
   $.ui.status(text)
+}
+
+// The guard's dialog: what resuming costs, and Continue / Continue and turn guard off / Cancel.
+async function askResume($, cold) {
+  const mins = Math.max(1, Math.round(cold.ago / 60_000))
+  try {
+    return await $.ui.ask(
+      `The prompt cache expired ${mins} min ago. Sending this re-reads ${fmt.tokens(cold.used)} tokens of context at the uncached rate: about ${fmt.usd(cold.rewrite)}, against ${fmt.usd(cold.warm)} while the cache was warm. Continue in this session?`,
+      { header: 'Cache guard', options: ['Continue', 'Continue and turn guard off', 'Cancel'] },
+    )
+  } catch {
+    return 'Cancel'
+  }
 }
 
 async function setGuard($, on) {
@@ -239,7 +267,7 @@ export function register(on, opts) {
     await $.command.register({
       name: 'usage-hud',
       description: 'Usage HUD: toggle the daily/session breakdown, or `pane`, `report`, `refresh`, `guard on|off` (ask after the cache expires), `limit 300k` (context soft limit)',
-      argumentHint: '[pane|report|refresh|guard [on|off]|limit <tokens>|limit reset]',
+      argumentHint: '[pane|report|refresh|guard [on|off|test]|limit <tokens>|limit reset]',
       immediate: true,
     })
     const saved = await $.store.get('ui')
@@ -276,6 +304,7 @@ export function register(on, opts) {
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     live = null
     turn = null
+    liveTtl = null
     await loadSessionFacts($)
     await runScan($)
     return next(e)
@@ -314,16 +343,7 @@ export function register(on, opts) {
     if (!guard || (kind && kind !== 'composer' && kind !== 'bridge') || e.turnId || /^\s*\//.test(e.text)) return next(e)
     const cold = coldCache()
     if (!cold) return next(e)
-    const mins = Math.max(1, Math.round(cold.ago / 60_000))
-    let answer
-    try {
-      answer = await $.ui.ask(
-        `The prompt cache expired ${mins} min ago. Sending this re-reads ${fmt.tokens(cold.used)} tokens of context at the uncached rate: about ${fmt.usd(cold.rewrite)}, against ${fmt.usd(cold.warm)} while the cache was warm. Continue in this session?`,
-        { header: 'Cache guard', options: ['Continue', 'Continue and turn guard off', 'Cancel'] },
-      )
-    } catch {
-      answer = 'Cancel'
-    }
+    const answer = await askResume($, cold)
     if (answer === 'Continue' || answer === 'Continue and turn guard off') {
       if (answer !== 'Continue') await setGuard($, false)
       return next(e)
@@ -356,6 +376,12 @@ ${fmt.truncate(e.text, 300)}` }
     }
     if (arg === 'guard' || arg.startsWith('guard ')) {
       const v = arg.slice(5).trim()
+      if (v === 'test') {
+        const cold = coldCache(true)
+        if (!cold) return { text: 'Nothing to test yet: no request has been made in this session.' }
+        const answer = await askResume($, cold)
+        return { text: `Guard test: you chose "${answer}". Nothing was sent or changed.` }
+      }
       await setGuard($, v === 'on' ? true : v === 'off' ? false : !guard)
       return { text: guard ? 'Cache guard on: I will ask before the first prompt after the prompt cache expires.' : 'Cache guard off.' }
     }
@@ -365,7 +391,9 @@ ${fmt.truncate(e.text, 300)}` }
     }
     if (arg === 'report') {
       await runScan($)
-      return { text: textSummary(viewModel('text')) }
+      const ttl = ttlInfo()
+      return { text: textSummary(viewModel('text')) + `
+TTL: ${ttl.ms >= HOUR ? '1h' : '5m'} (${ttl.source})` }
     }
     await toggleBreakdown($)
     return {}

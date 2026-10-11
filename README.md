@@ -34,7 +34,7 @@ Check a machine first with `scripts/check-prereqs.ps1` (Windows) or `scripts/che
 | `/usage-hud pane` | Open the breakdown in a pane |
 | `/usage-hud report` | Print a text summary (works where nothing is drawn, such as `claude -p`) |
 | `/usage-hud refresh` | Re-read history now |
-| `/usage-hud guard [on\|off]` | Turn the cache guard on or off (see below); no argument toggles it |
+| `/usage-hud guard [on\|off\|test]` | Turn the cache guard on or off (see below); no argument toggles it. `test` shows the question now without sending anything |
 | `/usage-hud limit 300k` | Move the context soft limit (saved; overrides the plugin option). `/usage-hud limit reset` goes back to the option |
 
 **Cache guard.** When the prompt cache has expired, the next prompt you send re-reads the whole context at the uncached rate. With the guard on, Claude Code first asks whether to continue in the same session, with the token count and the cost of re-caching against the warm rate: **Continue**, **Continue and turn guard off**, or **Cancel** (the prompt isn't sent; its text comes back in the message so you can resend it). Slash commands, scheduled prompts and messages typed mid-turn are never asked about. The **GUARD ON / OFF** button on the cache card (Desktop: **Cache guard ● ON** above the cards) is the switch and the indicator; it's saved across sessions.
